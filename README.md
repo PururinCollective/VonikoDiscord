@@ -29,23 +29,25 @@ Repeat steps 1â€“3 once per character:
 Then:
 
 4. Make sure LM Studio's server is running at `http://192.168.88.193:1234` with a model loaded.
-5. Start each character in her own terminal. The first run creates `.venv`. Every start installs anything missing from `requirements.txt` (`discord.py`, `pillow`, `ddgs`).
+5. Start every character at once. Each gets her own window, named after her:
 
    ```
-   run.bat --char sakurako
+   run.bat --char all
    ```
+
+   Or start one character in the current window:
 
    ```
    run.bat --char rin
    ```
 
-   ```
-   run.bat --char nijika
-   ```
+The first run creates `.venv`. Every start installs anything missing from `requirements.txt` (`discord.py`, `pillow`, `ddgs`).
 
 `--char <name>` loads `config.<name>.json` and keeps memory in `context/context.<name>.db`. You can also give the file directly: `run.bat --config config.rin.json`.
 
-**To stop a character, press `Q` in her window.** She logs out of Discord and saves her memory cleanly. Ctrl+C still works, but `Q` is the tidy way.
+`--char all` starts one window for every `config.<name>.json` except `config.example.json`, so a new character is included automatically. All of them share the one model loaded in LM Studio.
+
+**To stop a character, press `Q` in her window.** She logs out of Discord and saves her memory cleanly, and the window closes. If she stops because of an error (for example a bad token), her window stays open so you can read it. Ctrl+C still works, but `Q` is the tidy way.
 
 ## When they reply
 
@@ -160,7 +162,7 @@ Get channel and server IDs by turning on **Developer Mode** (Discord Settings â†
 
 1. Write `persona/<id>.md`. Copy the layout of [persona/rin.md](persona/rin.md): Profile, Personality, Friends, How you talk.
 2. Copy `config.example.json` to `config.<id>.json`. Set the `character` block, `discord.token`, `name_triggers`, `status_text` and her `web_search.waiting_messages`.
-3. Create and invite her bot as in **Setup**, then run `run.bat --char <id>`.
+3. Create and invite her bot as in **Setup**, then run `run.bat --char <id>`. From now on `run.bat --char all` starts her too.
 4. Add her to the list in the Terms of Service and Privacy Policy, and add her wiki source and copyright line to `persona/LICENSE.md`.
 
 ## Terms and privacy

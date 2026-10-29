@@ -499,7 +499,8 @@ def main():
     parser = argparse.ArgumentParser(description="Run an anime character bot on Discord, or chat with her "
                                                  "in the terminal.")
     who = parser.add_mutually_exclusive_group()
-    who.add_argument("--char", help="character to run, e.g. sakurako or rin (loads config.<char>.json)")
+    who.add_argument("--char", help="character to run, e.g. sakurako or rin (loads config.<char>.json); "
+                                    "'run.bat --char all' starts every character")
     who.add_argument("--config", help="config file to load, e.g. config.sakurako.json")
     parser.add_argument("--cli", action="store_true", help="chat in the terminal instead of Discord")
     parser.add_argument("--user", help="your name in --cli mode")
@@ -509,6 +510,8 @@ def main():
     choices = ", ".join(available_characters(here)) or "none yet (copy config.example.json to config.<char>.json)"
     if args.config:
         config_path = Path(args.config).resolve()
+    elif args.char and args.char.lower() == "all":
+        sys.exit("To start every character, each in her own window, run:  run.bat --char all")
     elif args.char:
         config_path = here / f"config.{args.char.lower()}.json"
     else:
