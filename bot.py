@@ -5,10 +5,12 @@ Each character has her own config.<char>.json and memory in context/context.<cha
     python bot.py --char all                 run every character together, taking turns (see director.py)
     python bot.py --config config.rin.json   run one character from an explicit config file
     python bot.py --char rin --cli           chat with Rin in the terminal
+    python bot.py --char all --no-tui        plain log lines instead of the status screen
 """
 import argparse
 import asyncio
 import base64
+import contextlib
 import getpass
 import io
 import json
@@ -25,7 +27,7 @@ from discord import app_commands
 from PIL import Image
 
 from brain import Character, forget_user
-from director import Director
+from director import Director, channel_label
 from llm import LMStudioClient
 from memory import ContextDB, make_snowflake, now_iso
 
@@ -199,12 +201,11 @@ class ForgetMeView(discord.ui.View):
 
 
 class CharacterBot(discord.Client):
-    def __init__(self, dcfg: dict, character: Character, db: ContextDB, db_path: Path, vision: bool,
-                 watch_keys: bool = True):
+    def __init__(self, dcfg: dict, character: Character, db: ContextDB, db_path: Path, vision: bool):
         self.cfg = dcfg
         self.vision = vision
-        self.watch_keys = watch_keys  # off when several characters share one window (one Q stops them all)
-        self.director = None          # set by Director when characters run together
+        self.director = None  # set by Director when characters run together
+        self.problem = ""     # why she couldn't log in, for the status screen
         intents = discord.Intents.default()
         intents.message_content = True
         super().__init__(intents=intents, allowed_mentions=discord.AllowedMentions(
@@ -249,22 +250,11 @@ class CharacterBot(discord.Client):
                 view=ForgetMeView(self, interaction.user), ephemeral=True)
 
     async def setup_hook(self):
-        if self.watch_keys:
-            self.keyboard_task = asyncio.create_task(self.watch_keyboard())
         try:
             synced = await self.tree.sync()
             self.log.info("Registered slash commands: %s", ", ".join("/" + c.name for c in synced))
         except discord.HTTPException:
             self.log.exception("Couldn't register slash commands (was the bot invited with applications.commands?)")
-
-    async def watch_keyboard(self):
-        """Press Q in the console window to log out and save cleanly (Windows console only)."""
-        if not has_console():
-            return
-        self.log.info("Press Q in this window to quit.")
-        await wait_for_q()
-        self.log.info("Q pressed: logging out of Discord and closing %s...", self.db_path.name)
-        await self.close()
 
     # --- which messages she sees and answers ------------------------------------------------
 
@@ -514,14 +504,16 @@ class CharacterBot(discord.Client):
 
     async def respond(self, message: discord.Message):
         channel = message.channel
-        images = await self.collect_images(message)
+        label = self.character.labels[channel.id] = channel_label(channel)
 
         async def say_searching(text: str):  # "wait, let me look that up!" while the search runs
             self.posted(await channel.send(text))
 
-        async with channel.typing():
-            reply = await self.character.reply(channel.id, self.describe_place(channel), message.id, images,
-                                               on_search=say_searching)
+        with self.character.busy(f"writing in {label}"):
+            images = await self.collect_images(message)
+            async with channel.typing():
+                reply = await self.character.reply(channel.id, self.describe_place(channel), message.id, images,
+                                                   on_search=say_searching)
         if not reply:
             self.log.warning("Model returned an empty reply in %s", self.describe_place(channel))
             return
@@ -615,63 +607,88 @@ def load_character(config_path: Path) -> tuple[dict, Character, ContextDB, Path]
     return cfg, Character(char_cfg, cfg, db, LMStudioClient(cfg["llm"]), base_dir, others), db, db_path
 
 
-def setup_discord_logging():
-    discord.utils.setup_logging(level=logging.INFO)
+def quiet_logs():
     for chatty in ("ddgs", "primp"):  # the web search libraries log every request they make
         logging.getLogger(chatty).setLevel(logging.WARNING)
     discord.VoiceClient.warn_nacl = discord.VoiceClient.warn_dave = False  # they never join voice
 
 
-def run_all(folder: Path):
-    """Every character in one process, taking turns through the director, with one Q to stop them all."""
-    setup_discord_logging()
-    bots, dbs = [], []
-    for name in available_characters(folder):
-        cfg, character, db, db_path = load_character(folder / f"config.{name}.json")
-        dbs.append(db)
-        token = cfg["discord"].get("token", "").strip()
-        if problem := token_problem(token):
-            log.warning("Skipping %s: discord.token in config.%s.json %s", character.name, name, problem)
-            continue
-        bots.append((CharacterBot(cfg["discord"], character, db, db_path, cfg["llm"].get("vision", True),
-                                  watch_keys=False), token))
-    if not bots:
-        sys.exit("No character has a usable bot token.")
-    Director([bot for bot, _ in bots], debounce=min(bot.debounce for bot, _ in bots),
-             max_bot_chain=min(bot.cfg.get("max_bot_chain", 3) for bot, _ in bots))
+def make_bot(cfg: dict, character: Character, db: ContextDB, db_path: Path) -> CharacterBot:
+    return CharacterBot(cfg["discord"], character, db, db_path, cfg["llm"].get("vision", True))
+
+
+def run_bots(bots: list[tuple[CharacterBot, str]], dbs: list[ContextDB], skipped: dict[str, str],
+             director: Director | None, use_tui: bool):
+    """Log the characters in and keep them running until Q (or Ctrl+C), with the status screen or with plain
+    log lines."""
+    quiet_logs()
+    screen = None
+    if use_tui:
+        from tui import StatusScreen  # only needed here; --cli and --no-tui work without it
+        screen = StatusScreen([bot for bot, _ in bots], skipped, director)
+    else:
+        discord.utils.setup_logging(level=logging.INFO)
 
     async def run_one(bot: CharacterBot, token: str):
         try:
             async with bot:
                 await bot.start(token)
         except discord.LoginFailure:
+            bot.problem = "token rejected"
             bot.log.error("Discord rejected %s's bot token (it was reset, or copied incompletely). %s",
                           bot.character.name, GET_TOKEN)
         except discord.PrivilegedIntentsRequired:
+            bot.problem = "Message Content Intent is off"
             bot.log.error("Turn on Message Content Intent for %s: discord.com/developers > the app > Bot > "
                           "Privileged Gateway Intents.", bot.character.name)
 
     async def stop_on_q():
         if has_console():
-            log.info("Running %s together. Press Q in this window to stop them all.",
-                     ", ".join(bot.character.name for bot, _ in bots))
+            log.info("Running %s. Press Q in this window to stop.", ", ".join(bot.character.name for bot, _ in bots))
             await wait_for_q()
-            log.info("Q pressed: logging everyone out...")
+            log.info("Q pressed: logging out and saving memory...")
             await asyncio.gather(*(bot.close() for bot, _ in bots))
 
     async def together():
-        keys = asyncio.create_task(stop_on_q())
-        await asyncio.gather(*(run_one(bot, token) for bot, token in bots))
-        keys.cancel()
+        helpers = [asyncio.create_task(stop_on_q())]
+        if screen:
+            helpers.append(asyncio.create_task(screen.refresh()))
+        try:
+            await asyncio.gather(*(run_one(bot, token) for bot, token in bots))
+        finally:
+            for task in helpers:
+                task.cancel()
 
     try:
-        asyncio.run(together())
-        log.info("Everyone has logged out. Bye!")
+        with screen or contextlib.nullcontext():
+            for name, why in skipped.items():
+                log.warning("Not running %s: %s", name, why)
+            asyncio.run(together())
+        log.info("Everyone has logged out. Bye!" if len(bots) > 1 else
+                 f"{bots[0][0].character.name} has logged out. Bye!")
     except KeyboardInterrupt:
         pass
     finally:
         for db in dbs:
             db.close()  # flushes SQLite's journal into the database file
+
+
+def run_all(folder: Path, use_tui: bool):
+    """Every character in one process, taking turns through the director, with one Q to stop them all."""
+    bots, dbs, skipped = [], [], {}
+    for name in available_characters(folder):
+        cfg, character, db, db_path = load_character(folder / f"config.{name}.json")
+        dbs.append(db)
+        token = cfg["discord"].get("token", "").strip()
+        if problem := token_problem(token):
+            skipped[character.name] = f"discord.token in config.{name}.json {problem}"
+            continue
+        bots.append((make_bot(cfg, character, db, db_path), token))
+    if not bots:
+        sys.exit("No character has a usable bot token.\n" + "\n".join(skipped.values()))
+    director = Director([bot for bot, _ in bots], debounce=min(bot.debounce for bot, _ in bots),
+                        max_bot_chain=min(bot.cfg.get("max_bot_chain", 3) for bot, _ in bots))
+    run_bots(bots, dbs, skipped, director, use_tui)
 
 
 def main():
@@ -685,13 +702,15 @@ def main():
     parser.add_argument("--cli", action="store_true", help="chat in the terminal instead of Discord")
     parser.add_argument("--user", help="your name in --cli mode")
     parser.add_argument("--say", help="with --cli: send one message, print the reply, and exit")
+    parser.add_argument("--no-tui", action="store_true", help="print plain log lines instead of the status screen")
     args = parser.parse_args()
+    use_tui = not args.no_tui and sys.stdout.isatty()
 
     choices = ", ".join(available_characters(here)) or "none yet (copy config.example.json to config.<char>.json)"
     if args.char and args.char.lower() == "all":
         if args.cli:
             sys.exit("--cli talks to one character: pick one with --char")
-        run_all(here)
+        run_all(here, use_tui)
         return
     if args.config:
         config_path = Path(args.config).resolve()
@@ -703,30 +722,20 @@ def main():
         sys.exit(f"{config_path} not found. Available characters: {choices}")
 
     cfg, character, db, db_path = load_character(config_path)
-    try:
-        if args.cli:
+    if args.cli:
+        try:
             sys.stdout.reconfigure(encoding="utf-8")
             logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
             user = args.user or cfg.get("cli", {}).get("user_name") or getpass.getuser()
             asyncio.run(run_cli(character, db, user, args.say))
-            return
-
-        token = cfg["discord"].get("token", "").strip()
-        if problem := token_problem(token):
-            sys.exit(f"discord.token in {config_path.name} {problem}\n{GET_TOKEN}")
-        setup_discord_logging()
-        bot = CharacterBot(cfg["discord"], character, db, db_path, cfg["llm"].get("vision", True))
-        try:
-            bot.run(token, log_handler=None)
-        except discord.LoginFailure:
-            sys.exit(f"Discord rejected {character.name}'s bot token (it was reset, or copied incompletely).\n"
-                     f"{GET_TOKEN}")
-        except discord.PrivilegedIntentsRequired:
-            sys.exit(f"Turn on Message Content Intent for {character.name}: discord.com/developers > the app > "
-                     "Bot > Privileged Gateway Intents.")
-        log.info("%s has logged out. Bye!", character.name)
-    finally:
-        db.close()  # flushes SQLite's journal into the database file
+        finally:
+            db.close()  # flushes SQLite's journal into the database file
+        return
+    token = cfg["discord"].get("token", "").strip()
+    if problem := token_problem(token):
+        db.close()
+        sys.exit(f"discord.token in {config_path.name} {problem}\n{GET_TOKEN}")
+    run_bots([(make_bot(cfg, character, db, db_path), token)], [db], {}, None, use_tui)
 
 
 if __name__ == "__main__":

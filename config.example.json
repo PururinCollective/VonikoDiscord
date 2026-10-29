@@ -39,8 +39,9 @@
     "model": "",
     "temperature": 0.9,
     "top_p": 0.95,
-    "max_tokens": 2048,
-    "reasoning_effort": "none",
+    "max_tokens": 4096,
+    "context_length": 0,
+    "reasoning_effort": "low",
     "timeout_seconds": 300,
     "vision": true,
     "extra_params": {}
@@ -67,6 +68,8 @@
   "memory": {
     "history_messages": 40,
     "summarize_batch": 40,
+    "compact_at": 0.75,
+    "keep_after_compact": 10,
     "max_message_chars": 1500
   },
   "cli": {

@@ -63,6 +63,7 @@ def now_iso() -> str:
 class ContextDB:
     def __init__(self, path: str, owner: str):
         """`owner` is the id of the character this database belongs to."""
+        self.owner = owner
         self.conn = sqlite3.connect(path)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
@@ -141,6 +142,13 @@ class ContextDB:
             (character, channel_id, summary, upto_id, now_iso()),
         )
         self.conn.commit()
+
+    def counts(self) -> tuple[int, int]:
+        """(messages stored, channels she has memory notes about), for the status screen."""
+        messages = self.conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
+        notes = self.conn.execute("SELECT COUNT(*) FROM summaries WHERE character = ? AND summary != ''",
+                                  (self.owner,)).fetchone()[0]
+        return messages, notes
 
     def all_summaries(self) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT character, channel_id, summary FROM summaries").fetchall()

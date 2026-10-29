@@ -41,7 +41,7 @@ Then:
    run.bat --char rin
    ```
 
-The first run creates `.venv`. Every start installs anything missing from `requirements.txt` (`discord.py`, `pillow`, `ddgs`).
+The first run creates `.venv`. Every start installs anything missing from `requirements.txt` (`discord.py`, `pillow`, `ddgs`, `rich`).
 
 `--char <name>` loads `config.<name>.json` and keeps memory in `context/context.<name>.db`. You can also give the file directly: `run.bat --config config.rin.json`.
 
@@ -50,6 +50,36 @@ The first run creates `.venv`. Every start installs anything missing from `requi
 **To stop, press `Q` in the window.** Everyone logs out of Discord and their memories are saved cleanly. With a single character, `Q` stops just her. Ctrl+C still works, but `Q` is the tidy way.
 
 Don't run the same character twice (for example `--char all` plus `--char rin` in another window). She'd answer every message twice.
+
+## Status screen
+
+While the bots run, the window shows a live status screen ([tui.py](tui.py)) instead of scrolling log lines:
+
+```
+ VonikoDiscord  LM Studio 192.168.88.193:1234 · huihui-qwen3.8-27b-abliterated · vision · context 50,688     01:38:36
+┌─ Characters ──────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ Character   Discord          Doing                Context (compacts at 75%)              Memory                   │
+│ ───────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│ Nijika      ● online 42 ms   writing in #gener…   ████████░░  79% 39.8k/50.7k #general   238 msgs · 1 note        │
+│ Rin         ● online 40 ms   idle                 ░░░░░░░░░░   4% 2.0k/50.7k #general    249 msgs · 1 note        │
+│ Sakurako    ● online 41 ms   idle                 compacted; measured on next reply      compacted 2x · 188 msgs… │
+└───────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+┌─ Turns ───────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ #general  Nijika is answering Anime4000; next: Sakurako                                                    3s ago │
+└───────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+┌─ Log ─────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ 01:38:36 INFO director: Nijika, Sakurako answer(s) Anime4000, in that order                                       │
+│ 01:38:36 INFO brain: Compacting Sakurako's memory of #general (her prompt was 38,410 of 50,688 tokens)            │
+│ 01:38:36 INFO brain: Updated Sakurako's memory of #general (52 message(s) folded in, 10 kept word for word)       │
+└───────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+ Q  quit   the log is printed again after quitting                                                         up 0:12:04
+```
+
+- **Characters:** whether she's online, what she's doing (writing, searching the web, compacting her memory), and how big her latest prompt was compared to the model's context. The bar turns yellow as it nears `compact_at` and red when it gets there. Windows at least 116 columns wide also show Memory (stored messages, memory notes, how many times she has compacted), and at least 144 columns wide, Replies (how many, when the last one was, and how many tokens she thought before it). The header shows the thinking level and the model's speed.
+- **Turns** (with `--char all`): what the director is doing in each channel: who is answering, who's next, or who is waiting.
+- **Log:** the newest log lines. When you quit, the screen closes and the last 2,000 log lines are printed back into the window.
+
+`--no-tui` prints plain log lines instead, as before, for example when you redirect the output to a file. The screen is also switched off automatically when the output isn't a console window.
 
 ## Taking turns
 
@@ -111,7 +141,7 @@ The characters can look things up online: news, release dates, prices, weather, 
 
 **Limits:**
 
-- **Searches.** She gets at most `max_searches` search rounds per reply (default 1), and reasoning stays off (`llm.reasoning_effort: "none"`), so answers come quickly. Raise `max_searches` to 2 for harder questions.
+- **Searches.** She gets at most `max_searches` search rounds per reply (default 1). Raise it to 2 for harder questions. Each round also thinks first (see `llm.reasoning_effort`), so a reply with a search takes about 15 seconds.
 - **Not searched.** She won't search about herself (she already knows her own story) or for anything sexual. The search provider's SafeSearch is set to strict (`safesearch: "on"`).
 - **Local network.** Result pages on your local network (localhost, `192.168.x.x`, ...) are never fetched.
 - **Untrusted pages.** Page text is marked as untrusted, and she's told never to follow instructions inside it.
@@ -137,6 +167,12 @@ The command is registered every time a bot starts. If a new command doesn't appe
 
 - **Message log.** Every message in the channels a character watches is saved in her database. Edits update the saved copy, and deleted messages are removed.
 - **Long-term memory.** The last `history_messages` messages per channel go into the prompt word for word. Older ones are folded into a per-channel summary written from her point of view.
+- **Compacting when the context fills up.** LM Studio reports how many tokens the loaded model's context holds (`loaded_context_length`), and every reply reports how big the prompt was. Compaction folds all but the newest `keep_after_compact` messages into her memory notes. It happens in three cases:
+  - when a prompt uses `compact_at` of the context (75% by default), right after she replies;
+  - before sending, if a prompt would be too big to fit, leaving room for her reply. If it still doesn't fit after compacting, the oldest messages are left out;
+  - when LM Studio rejects a prompt as too long, before she tries once more.
+
+  The notes are written in batches small enough for the model's context too. Compactions show in the log and on the status screen.
 - **Catch-up after a restart.** On startup she fetches up to `catch_up_limit` messages she missed while offline. If the newest one was addressed to her and is less than `catch_up_reply_max_age_minutes` old, she answers it.
 - **Older memory files.** Earlier versions kept memory next to `bot.py`: `context.db` (Sakurako only), then `context.<char>.db`. The next time a character starts, her file is moved into `context/` (and upgraded if needed). Stop the running copy of her first.
 - **To wipe a character's memory**, stop her and delete `context/context.<char>.db`.
@@ -173,8 +209,10 @@ This uses the same brain and memory database, in a private "terminal" channel. T
 | `llm.base_url` | LM Studio server |
 | `llm.model` | Model id. Empty = whichever chat model LM Studio has loaded (re-checked every 30 seconds) |
 | `llm.vision` | Show her attached images (only works with a vision model) |
-| `llm.reasoning_effort` | `"none"` turns off the model's thinking: faster replies, and avoids empty answers from this Qwen model. Set to `""` to let it think |
-| `llm.temperature`, `top_p`, `max_tokens`, `extra_params` | Sampling settings (`extra_params` is merged into the API request as-is) |
+| `llm.context_length` | Tokens the model's context holds. `0` = ask LM Studio (the context length the model was loaded with). Set it if your LM Studio is too old to report it |
+| `llm.reasoning_effort` | How much the model thinks before replying: `"low"` (default), `"medium"`, `"high"`, `"none"` (off) or `""` (the model decides). With this model, low thinks about 100–350 tokens and makes a reply take 7–15 seconds instead of 3–5, but she answers questions properly instead of brushing them off. Medium thinks about as much as low. Memory notes are always written without thinking, so they don't hold up replies. If thinking ever uses up `max_tokens` before she answers, she tries once more without thinking |
+| `llm.max_tokens` | Longest reply, thinking included (default `4096`). Leave room for thinking: at `2048` a long think can leave nothing for the answer |
+| `llm.temperature`, `top_p`, `extra_params` | Sampling settings (`extra_params` is merged into the API request as-is) |
 | `web_search.enabled` | Let her search the web |
 | `web_search.provider` | `"duckduckgo"` (no key), `"searxng"` (with `searxng_url`) or `"brave"` (with `brave_api_key`) |
 | `web_search.safesearch` | `"on"` / `"moderate"` / `"off"` |
@@ -185,6 +223,8 @@ This uses the same brain and memory database, in a private "terminal" channel. T
 | `web_search.waiting_messages` | What she says while she looks something up (one is picked at random) |
 | `memory.history_messages` | Messages kept word for word in the prompt |
 | `memory.summarize_batch` | How many extra messages pile up before older ones are summarized |
+| `memory.compact_at` | Compact her memory of a channel once a prompt there uses this share of the context (default `0.75`) |
+| `memory.keep_after_compact` | Messages kept word for word after compacting (default `10`) |
 | `memory.db_path` | Optional. Defaults to `context/context.<id>.db`. Keep every character's database in the same folder and named `context.*.db`, so `/forgetme` finds them all |
 | `cli.user_name` | Your name in terminal mode (defaults to your Windows user name) |
 
@@ -219,6 +259,7 @@ When you add a character, add her wiki source and copyright line to [persona/LIC
 - `llm.py`: LM Studio API client
 - `websearch.py`: the web search tool (DuckDuckGo / SearXNG / Brave, plus reading result pages)
 - `director.py`: turn-taking when all characters run together (`--char all`)
+- `tui.py`: the status screen
 - `memory.py`: the `context/context.<char>.db` memory databases (SQLite)
 - `persona/*.md`: character sheets
 - `config.example.json`: template for a new character's config

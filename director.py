@@ -18,6 +18,14 @@ log = logging.getLogger("director")
 BOT_QUIET_SECONDS = 1.0  # wait after a character's message before the next one reacts to it
 
 
+def channel_label(channel) -> str:
+    """Short name for logs and the status screen: #general, or "DM with Name"."""
+    if isinstance(channel, discord.DMChannel):
+        return f"DM with {channel.recipient.display_name}" if channel.recipient else "a DM"
+    name = getattr(channel, "name", None)
+    return f"#{name}" if name else f"channel {channel.id}"
+
+
 class Director:
     def __init__(self, bots: list, debounce: float, max_bot_chain: int):
         self.bots = bots
@@ -32,6 +40,7 @@ class Director:
         self.chain: dict[int, int] = {}                  # bot messages in a row since a person spoke
         self.last_person: dict[int, int] = {}            # id of the newest message from a person
         self.workers: dict[int, asyncio.Task] = {}
+        self.state: dict[int, tuple[str, str, float]] = {}  # channel id -> (name, what's going on, since)
         for bot in bots:
             bot.director = self
 
@@ -49,9 +58,15 @@ class Director:
             self.last_person[channel_id] = message.id
             self.pending_person[channel_id] = message
         self.last_seen[channel_id] = time.monotonic()
+        if not message.author.bot:
+            self.show(message.channel, f"{message.author.display_name} spoke; waiting for the chat to settle")
         worker = self.workers.get(channel_id)
         if worker is None or worker.done():
             self.workers[channel_id] = asyncio.create_task(self._worker(channel_id))
+
+    def show(self, channel, what: str) -> None:
+        """Note what's happening in a channel, for the status screen."""
+        self.state[channel.id] = (channel_label(channel), what, time.monotonic())
 
     def share(self, author_bot, sent: discord.Message) -> None:
         """A character just posted: put it in the other characters' memory right away, so whoever speaks next
@@ -87,16 +102,28 @@ class Director:
                 message = self.pending_bot.pop(channel_id)
             person = self.last_person.get(channel_id)
             speakers = self.speakers(message)
+            who = message.author.display_name
             if speakers:
-                log.info("%s answer(s) %s, in that order", ", ".join(b.character.name for b in speakers),
-                         message.author.display_name)
-            for bot in speakers:
+                log.info("%s answer(s) %s, in that order", ", ".join(b.character.name for b in speakers), who)
+            elif message.author.bot and self.chain.get(channel_id, 0) >= self.max_bot_chain:
+                self.show(message.channel, f"{self.max_bot_chain} character messages in a row; waiting for a person")
+            elif not message.author.bot:
+                self.show(message.channel, f"nobody was called by {who}; everyone just reads")
+            for i, bot in enumerate(speakers):
                 if self.last_person.get(channel_id) != person:
                     log.info("Someone said something new; the rest of this round is skipped")
                     break
                 if message.author.bot and self.chain.get(channel_id, 0) >= self.max_bot_chain:
+                    self.show(message.channel, f"{self.max_bot_chain} character messages in a row; "
+                                               "waiting for a person")
                     break  # the characters before her in this round used up the chain
+                waiting = ", ".join(b.character.name for b in speakers[i + 1:])
+                self.show(message.channel, f"{bot.character.name} is answering {who}"
+                                           + (f"; next: {waiting}" if waiting else ""))
                 try:
                     await bot.answer(message)
                 except Exception:
                     bot.log.exception("Failed to reply in channel %s", channel_id)
+            else:
+                if speakers:
+                    self.show(message.channel, f"{', '.join(b.character.name for b in speakers)} answered {who}")
