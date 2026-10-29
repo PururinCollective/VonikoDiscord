@@ -3,6 +3,7 @@
     "id": "sakurako",
     "name": "Sakurako",
     "full_name": "Oomuro Sakurako",
+    "series": "Yuru Yuri",
     "persona_file": "persona/sakurako.md"
   },
   "discord": {
@@ -23,6 +24,8 @@
     "free_talk_channel_ids": [],
     "reply_to_dms": true,
     "reply_to_bots": false,
+    "reply_to_characters": true,
+    "max_bot_chain": 3,
     "random_reply_chance": 0.0,
     "mention_author": false,
     "debounce_seconds": 2.5,

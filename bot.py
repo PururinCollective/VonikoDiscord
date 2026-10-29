@@ -56,10 +56,34 @@ def token_problem(token: str) -> str | None:
     return None
 
 
-def trigger_pattern(triggers: list[str]) -> re.Pattern | None:
-    """Whole-word match for latin names (so "rin" doesn't fire on "string"), substring match for CJK."""
-    parts = [rf"\b{re.escape(t)}\b" if t.isascii() else re.escape(t) for t in triggers]
-    return re.compile("|".join(parts), re.IGNORECASE) if parts else None
+SENTENCE_END = re.compile(r"[.!?。！？\n]+")
+HONORIFIC = re.compile(r"-(chan|san|sama|senpai|sensei|kun|tan)$")
+JP_HONORIFICS = ("ちゃん", "さん", "様", "さま", "先輩", "せんぱい")
+
+
+class NameTrigger:
+    """Decides whether a message is talking TO her by name, not just about her. Her name has to be one of
+    the first 3 words of a sentence ("Rin, ...", "hey Rin, ...") or its last word ("... right, Rin?"),
+    so "nijika, can you ask sakurako about rin camping?" calls only Nijika."""
+
+    def __init__(self, triggers: list[str]):
+        self.latin = [[HONORIFIC.sub("", w) for w in t.lower().split()] for t in triggers if t.isascii()]
+        self.cjk = [t for t in triggers if not t.isascii()]
+
+    def called(self, text: str) -> bool:
+        for sentence in SENTENCE_END.split(text):
+            words = [HONORIFIC.sub("", w.strip("'’-")) for w in re.findall(r"[\w'’-]+", sentence.lower())]
+            words = [w for w in words if w]  # "rin's" stays one word, so it isn't "rin"
+            for name in self.latin:
+                for i in range(len(words) - len(name) + 1):
+                    if words[i:i + len(name)] == name and (i < 3 or i + len(name) == len(words)):
+                        return True
+            sentence = sentence.strip(" \t,，、:：…~～")
+            for name in self.cjk:  # Japanese has no spaces: at the start, or at the end (maybe with ちゃん etc.)
+                at = sentence.find(name)
+                if at != -1 and (at <= 3 or sentence[at + len(name):] in ("", *JP_HONORIFICS)):
+                    return True
+        return False
 
 
 def available_characters(folder: Path) -> list[str]:
@@ -165,7 +189,7 @@ class CharacterBot(discord.Client):
         self.guild_ids = set(dcfg.get("guild_ids") or [])
         self.channel_ids = set(dcfg.get("channel_ids") or [])
         self.free_talk_ids = set(dcfg.get("free_talk_channel_ids") or [])
-        self.triggers = trigger_pattern(dcfg.get("name_triggers") or [])
+        self.triggers = NameTrigger(dcfg.get("name_triggers") or [])
         self.debounce = dcfg.get("debounce_seconds", 2.5)
         self.pending: dict[int, discord.Message] = {}      # channel id -> newest message to answer
         self.last_trigger: dict[int, float] = {}
@@ -238,7 +262,7 @@ class CharacterBot(discord.Client):
         ref = message.reference.resolved if message.reference else None
         if isinstance(ref, discord.Message) and ref.author.id == self.user.id:
             return True
-        return bool(self.triggers and self.triggers.search(message.content))
+        return self.triggers.called(message.content)
 
     def should_reply(self, message: discord.Message) -> bool:
         if self.addressed(message):
@@ -328,11 +352,27 @@ class CharacterBot(discord.Client):
             return
         if not self.remember(message) or message.author.id == self.user.id:
             return
-        # other characters are bots too; letting two of them answer each other would never end
-        if message.author.bot and not self.cfg.get("reply_to_bots", False):
-            return
+        if message.author.bot:
+            # The other characters are bots too. Answer one only when she talks to this character, and stop
+            # after max_bot_chain bot messages in a row, so two characters can't keep talking forever.
+            if self.bot_chain(message.channel) >= self.cfg.get("max_bot_chain", 3):
+                return
+            if not self.cfg.get("reply_to_bots", False):
+                if self.cfg.get("reply_to_characters", True) and self.addressed(message):
+                    self.schedule(message)
+                return
         if self.should_reply(message):
             self.schedule(message)
+
+    def bot_chain(self, channel) -> int:
+        """How many bot messages in a row end this channel, i.e. since a person last said something."""
+        count = 0
+        for m in reversed(self.cached_messages):
+            if m.channel.id == channel.id:
+                if not m.author.bot:
+                    break
+                count += 1
+        return count
 
     async def on_message_edit(self, before: discord.Message, after: discord.Message):
         if self.watching(after.channel) and (text := self.to_text(after)):
@@ -526,7 +566,16 @@ def main():
     db_path.parent.mkdir(parents=True, exist_ok=True)
     move_old_db(base_dir, db_path, char_cfg["id"])
     db = ContextDB(str(db_path), owner=char_cfg["id"])
-    character = Character(char_cfg, cfg, db, LMStudioClient(cfg["llm"]), base_dir)
+    others = []  # the other characters (their config files sit next to this one), so she knows who's around
+    for name in available_characters(base_dir):
+        path = base_dir / f"config.{name}.json"
+        try:
+            other = load_config(path)["character"] if path.resolve() != config_path else None
+        except (OSError, ValueError, KeyError):
+            other = None
+        if other and other.get("id") != char_cfg["id"]:
+            others.append(other)
+    character = Character(char_cfg, cfg, db, LMStudioClient(cfg["llm"]), base_dir, others)
 
     try:
         if args.cli:

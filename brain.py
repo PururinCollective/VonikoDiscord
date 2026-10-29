@@ -45,13 +45,30 @@ SEXUAL_QUERY_RE = re.compile(
     r"\b(sex\w*|nsfw|porn\w*|hentai|ecchi|nude\w*|naked|lewd|erotic\w*|boobs?|breasts?|nipples?|loli\w*|r-?18)\b"
     r"|エロ|裸|おっぱい|セックス|成人向け", re.IGNORECASE)
 
+def others_section(others: list[dict]) -> str:
+    if not others:
+        return ""
+    listing = "\n".join(f"- {o.get('full_name', o['name'])}" + (f" from {o['series']}" if o.get("series") else "")
+                        + f" (called \"{o['name']}\")" for o in others)
+    return ("# Other AI characters in this server\n"
+            "These characters are separate AI bots chatting here too, just like you:\n" + listing + "\n"
+            "- You know who they are. You're from different series, but you all hang out in this server.\n"
+            "- They read the chat. To talk to one, start your message with her name (\"Rin, ...\") and she will "
+            "answer you.\n"
+            "- If someone asks you to ask one of them something, ask her directly by name. Never say you can't "
+            "reach her.")
+
+
 # shared by every character, so memory notes are never rewritten by two tasks at once
 _summary_locks: defaultdict[tuple[str, int], asyncio.Lock] = defaultdict(asyncio.Lock)
 
 
 class Character:
-    def __init__(self, char_cfg: dict, cfg: dict, db: ContextDB, llm: LMStudioClient, base_dir: Path):
+    def __init__(self, char_cfg: dict, cfg: dict, db: ContextDB, llm: LMStudioClient, base_dir: Path,
+                 others: list[dict] | None = None):
+        """`others` are the other characters' config["character"] blocks, so she knows who else is here."""
         mem = cfg["memory"]
+        self.others_section = others_section(others or [])
         search = cfg.get("web_search", {})
         self.search = websearch.WebSearch(search) if search.get("enabled") else None
         self.max_searches = search.get("max_searches", 1)
@@ -80,14 +97,15 @@ class Character:
                   f"# Right now\n- You are chatting in {place}.\n"
                   f"- Current date and time: {datetime.now().strftime('%A, %d %B %Y, %H:%M')}.",
                   "# Your memory of earlier conversation here\n" + (summary or "(nothing yet)"),
+                  self.others_section,
                   RULES.format(name=self.name)]
         if self.search:
             system.append(SEARCH_RULES)
-        if target_id and rows and rows[-1]["message_id"] != target_id:
-            target = self.db.get_message(target_id)
-            if target:
-                system.append(f"# Reply target\nReply to {target['author_name']}'s message: "
-                              f"\"{target['content'][:300]}\"")
+        if target_id and (target := self.db.get_message(target_id)):
+            # always spelled out: the chat log merges messages, and she'd otherwise answer an older one
+            system.append(f"# The message you are answering\n{target['author_name']}: \"{target['content'][:500]}\"\n"
+                          "Reply to this message.")
+        system = [part for part in system if part]
 
         chat: list[dict] = []
         for row in rows:

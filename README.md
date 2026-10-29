@@ -54,14 +54,27 @@ The first run creates `.venv`. Every start installs anything missing from `requi
 Each character replies:
 
 - when someone @mentions her, replies to one of her messages, or DMs her;
-- when a message contains one of her `name_triggers`, e.g. `sakurako`, `櫻子`, `rin` or `しまりん`. Latin names must match a whole word, so `rin` doesn't fire on "string";
+- when someone calls her by one of her `name_triggers` (e.g. `sakurako`, `櫻子`, `rin`, `しまりん`);
 - to every message in her `free_talk_channel_ids`, and to a `random_reply_chance` share of other messages.
 
-Mention both characters ("Sakurako, Rin, ...") and both will answer.
+**What counts as calling her by name.** Her name has to be one of the first 3 words of a sentence or its last word:
 
-Characters are bots, so with `reply_to_bots` off (the default) they never answer each other. Each still reads and stores what the others said, and can react to it in her next reply.
+- **Counts:** "Rin, …", "hey Rin, …", "…what do you think, Rin?", "櫻子、…".
+- **Doesn't count:** just mentioning her ("nijika, can you ask sakurako about rin camping?" calls only Nijika).
+- **Honorifics:** like `-chan`, `-sama`, ちゃん and 様 are fine.
+- **Similar words:** "Rin's", "string" or "プリン" never call Rin.
 
-**Don't turn on `reply_to_bots` for two characters who share a channel.** They would reply to each other forever.
+Call several at once ("Sakurako and Nijika, come here!") and they'll all answer.
+
+**Characters talking to each other.** Each character knows who the other characters are (from their `config.*.json` files next to hers).
+
+- **Asking another character:** asked to ask another character something, she calls her by name ("Sakurako, can you tell Anime4000…"), and the other one answers. This is `reply_to_characters`, on by default.
+- **Chain limit:** after `max_bot_chain` (default 3) bot messages in a row, no character starts another reply until a person speaks, so they can't talk forever.
+- **`reply_to_bots`:** with this on, she answers any bot that calls her, not only the other characters. The same chain limit applies.
+
+**She always knows which message she's answering**, even when several people (or characters) talked in between.
+
+**Replies to other people's messages.** She can be asked about another member's message by replying to it with her name, e.g. "nijika, can you look why it crashes?". She sees the first 300 characters of the replied-to message, plus its images, so a reply to someone's screenshot works.
 
 **Replies to other people's messages.** She can be asked about another member's message by replying to it with her name, e.g. "nijika, can you look why it crashes?". She sees the first 300 characters of the replied-to message, plus its images, so a reply to someone's screenshot works.
 
@@ -127,6 +140,7 @@ This uses the same brain and memory database, in a private "terminal" channel. T
 |---|---|
 | `character.id` | Short id, also used for her `context/context.<id>.db`. Don't change it once she has memories |
 | `character.name`, `full_name` | Name used in prompts, and for removing a "Name:" prefix the model sometimes copies into replies |
+| `character.series` | Her series, shown to the other characters so they know who she is |
 | `character.persona_file` | Her character sheet |
 | `discord.token` | Her bot token (keep it secret; `config.*.json` is in `.gitignore`, except the example) |
 | `discord.name_triggers` | Words that count as calling her |
@@ -134,7 +148,10 @@ This uses the same brain and memory database, in a private "terminal" channel. T
 | `discord.guild_ids` | Only work in these server IDs. Empty = any server she's in |
 | `discord.channel_ids` | Only read/reply in these channels (threads inside them included). Empty = every channel she can see |
 | `discord.free_talk_channel_ids` | Channels where she joins every conversation without being called |
-| `discord.reply_to_dms` / `reply_to_bots` | Answer DMs / other bots (including the other characters) |
+| `discord.reply_to_dms` | Answer DMs |
+| `discord.reply_to_characters` | Answer another bot (e.g. another character) when it calls her by name, @mentions her or replies to her |
+| `discord.reply_to_bots` | Answer any bot the way she answers people (name, free-talk channels, random chance) |
+| `discord.max_bot_chain` | After this many bot messages in a row, no character starts another reply until a person speaks (default 3) |
 | `discord.random_reply_chance` | 0.0–1.0 chance to jump into any other message |
 | `discord.mention_author` | Ping the person when she uses Discord's reply feature |
 | `discord.catch_up_*`, `reply_to_missed` | Resume behaviour after a restart |
