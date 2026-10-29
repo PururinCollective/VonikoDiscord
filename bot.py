@@ -34,6 +34,7 @@ DB_FOLDER = "context"
 MAX_IMAGES = 4                     # per message
 MAX_IMAGE_BYTES = 25 * 1024 * 1024
 IMAGE_MAX_SIDE = 1024              # px; bigger images are shrunk before they're sent to the model
+REPLY_QUOTE_CHARS = 300            # how much of a replied-to message is quoted
 LEGACY_DB = ("context.db", "sakurako")  # memory file of the Sakurako-only version, and who it belongs to
 
 
@@ -90,6 +91,11 @@ def image_to_data_url(data: bytes) -> str | None:
     except Exception:
         return None
     return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+
+
+def shorten(text: str, limit: int = REPLY_QUOTE_CHARS) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[:limit - 1].rstrip() + "…"
 
 
 def split_message(text: str, limit: int = 2000) -> list[str]:
@@ -244,14 +250,41 @@ class CharacterBot(discord.Client):
 
     # --- storing messages in context.db ---------------------------------------------------------
 
-    def to_text(self, message: discord.Message) -> str:
+    @staticmethod
+    def plain_text(message: discord.Message) -> str:
         text = message.clean_content
-        ref = message.reference.resolved if message.reference else None
-        if isinstance(ref, discord.Message):
-            text = f"(replying to {ref.author.display_name}) {text}"
         text += "".join(f" [attachment: {a.filename}]" for a in message.attachments)
         text += "".join(f" [sticker: {s.name}]" for s in message.stickers)
         return text.strip()
+
+    def to_text(self, message: discord.Message) -> str:
+        """The message as stored and shown to the model. A reply quotes the start of the message it answers,
+        so "nijika, can you look at this?" sent as a reply still makes sense later."""
+        text = self.plain_text(message)
+        if message.type != discord.MessageType.reply or not message.reference:
+            return text
+        ref = message.reference.resolved
+        if isinstance(ref, discord.Message):
+            name, quoted = ref.author.display_name, self.plain_text(ref)
+        elif stored := self.db.get_message(message.reference.message_id or 0):  # Discord didn't include it
+            name, quoted = stored["author_name"], stored["content"]
+        else:
+            return text  # replied-to message was deleted, and we never saw it
+        return f'(replying to {name}: "{shorten(quoted)}") {text}' if quoted else f"(replying to {name}) {text}"
+
+    async def replied_to(self, message: discord.Message) -> discord.Message | None:
+        """The message this one replies to, fetched from Discord if it wasn't included."""
+        if message.type != discord.MessageType.reply or not message.reference:
+            return None
+        ref = message.reference.resolved
+        if isinstance(ref, discord.Message):
+            return ref
+        if isinstance(ref, discord.DeletedReferencedMessage) or not message.reference.message_id:
+            return None
+        try:
+            return await message.channel.fetch_message(message.reference.message_id)
+        except discord.HTTPException:
+            return None
 
     def remember(self, message: discord.Message) -> bool:
         """Store the message. Returns False if there was nothing to store."""
@@ -361,11 +394,17 @@ class CharacterBot(discord.Client):
                 self.log.exception("Failed to reply in channel %s", channel_id)
 
     async def collect_images(self, message: discord.Message) -> list[str]:
-        """Images attached to the message, ready for the model (none if the loaded model is text-only)."""
+        """Images attached to the message and to the message it replies to (so "nijika, what's wrong here?"
+        as a reply to someone's screenshot works), ready for the model. None if the model is text-only."""
         if not self.vision or not await self.character.llm.supports_images():
             return []
+        attachments = list(message.attachments)
+        if ref := await self.replied_to(message):
+            attachments += ref.attachments
         images = []
-        for a in message.attachments[:MAX_IMAGES]:
+        for a in attachments:
+            if len(images) >= MAX_IMAGES:
+                break
             if (a.content_type or "").startswith("image/") and a.size <= MAX_IMAGE_BYTES:
                 if url := await asyncio.to_thread(image_to_data_url, await a.read()):
                     images.append(url)

@@ -61,9 +61,11 @@ Characters are bots, so with `reply_to_bots` off (the default) they never answer
 
 **Don't turn on `reply_to_bots` for two characters who share a channel.** They would reply to each other forever.
 
+**Replies to other people's messages.** She can be asked about another member's message by replying to it with her name, e.g. "nijika, can you look why it crashes?". She sees the first 300 characters of the replied-to message, plus its images, so a reply to someone's screenshot works.
+
 Each waits `debounce_seconds` for people to finish typing and then answers once. If other messages arrived in the meantime, she replies to the specific message she's answering.
 
-**Images.** She looks at up to 4 images attached to the message she's answering, when `llm.vision` is on and LM Studio's loaded model is a vision model (type `vlm` in LM Studio, e.g. `huihui-qwen3.8-27b-abliterated`).
+**Images.** She looks at up to 4 images attached to the message she's answering (or to the message it replies to), when `llm.vision` is on and LM Studio's loaded model is a vision model (type `vlm` in LM Studio, e.g. `huihui-qwen3.8-27b-abliterated`).
 
 - Each image is converted to a JPEG of at most 1024 px first, because LM Studio rejects WebP and large photos are slow.
 - With a text-only model (e.g. `qwen3.8-27b-defiance-uncensored-mtp`), images are skipped. She only sees the file name.
