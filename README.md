@@ -155,13 +155,22 @@ Get channel and server IDs by turning on **Developer Mode** (Discord Settings â†
 1. Write `persona/<id>.md`. Copy the layout of [persona/rin.md](persona/rin.md): Profile, Personality, Friends, How you talk.
 2. Copy `config.example.json` to `config.<id>.json`. Set the `character` block, `discord.token`, `name_triggers`, `status_text` and her `web_search.waiting_messages`.
 3. Create and invite her bot as in **Setup**, then run `run.bat --char <id>`.
-4. Add her to the list in the Terms of Service and Privacy Policy.
+4. Add her to the list in the Terms of Service and Privacy Policy, and add her wiki source and copyright line to `persona/LICENSE.md`.
 
 ## Terms and privacy
 
 - [TERMS_OF_SERVICE.md](TERMS_OF_SERVICE.md) and [PRIVACY_POLICY.md](PRIVACY_POLICY.md) cover all the characters.
 - Once the repo is on GitHub, paste their links into each bot's Developer Portal page: **General Information** â†’ **Terms of Service URL** and **Privacy Policy URL**.
 - If you change what the bots store or where data goes (for example `channel_ids`, `catch_up_limit`, `vision` or `web_search.provider`), update the privacy policy to match.
+
+## License
+
+- **Code and everything else** (`*.py`, `run.bat`, `config.example.json`, the docs): [MIT](LICENSE).
+- **Character sheets** (`persona/*.md`): [CC BY-SA 4.0](persona/LICENSE.md), because they're based on Fandom wiki articles under CC BY-SA. That file credits the wiki pages.
+- **The characters** (Oomuro Sakurako, Shima Rin, Ijichi Nijika), their names and their series belong to their creators and publishers, and neither license covers them. This is an unofficial fan project, not affiliated with or endorsed by them.
+- **Never publish** `dump/` (saved wiki pages, including Fandom's site code and images), `config.*.json` (bot tokens) or `context/` (members' messages). All three are in `.gitignore`.
+
+When you add a character, add her wiki source and copyright line to [persona/LICENSE.md](persona/LICENSE.md).
 
 ## Files
 
