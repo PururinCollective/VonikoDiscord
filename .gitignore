@@ -1,0 +1,8 @@
+config.*.json
+!config.example.json
+context/
+context*.db*
+.venv/
+.user/
+__pycache__/
+dump/

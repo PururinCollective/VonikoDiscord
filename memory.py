@@ -1,0 +1,178 @@
+"""context.<character>.db: persistent chat memory so a character can pick up where she left off after a restart.
+
+Each character has her own database: every message she sees, plus a rolling per-channel summary of older
+messages (her "long-term memory"), so the prompt stays small while nothing is forgotten.
+"""
+import itertools
+import sqlite3
+import time
+from datetime import datetime, timezone
+
+DISCORD_EPOCH_MS = 1420070400000
+_counter = itertools.count()
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS messages (
+    message_id  INTEGER PRIMARY KEY,          -- Discord snowflake (time-ordered)
+    channel_id  INTEGER NOT NULL,
+    guild_id    INTEGER,
+    author_id   INTEGER,
+    author_name TEXT NOT NULL,
+    character   TEXT,                         -- id of the character who wrote it; NULL = a person or other bot
+    content     TEXT NOT NULL,
+    created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, message_id);
+
+CREATE TABLE IF NOT EXISTS summaries (
+    character   TEXT NOT NULL,
+    channel_id  INTEGER NOT NULL,
+    summary     TEXT NOT NULL,
+    upto_id     INTEGER NOT NULL,             -- messages up to this id are covered by the summary
+    updated_at  TEXT NOT NULL,
+    PRIMARY KEY (character, channel_id)
+);
+"""
+
+# The first version had an is_self flag instead of a character column.
+MIGRATE_V1 = """
+BEGIN;
+DROP INDEX IF EXISTS idx_messages_channel;
+ALTER TABLE messages RENAME TO messages_v1;
+ALTER TABLE summaries RENAME TO summaries_v1;
+""" + SCHEMA + """
+INSERT INTO messages SELECT message_id, channel_id, guild_id, author_id, author_name,
+    CASE WHEN is_self THEN {owner} END, content, created_at FROM messages_v1;
+INSERT INTO summaries SELECT {owner}, channel_id, summary, upto_id, updated_at FROM summaries_v1;
+DROP TABLE messages_v1;
+DROP TABLE summaries_v1;
+COMMIT;
+"""
+
+
+def make_snowflake() -> int:
+    """Time-ordered id for messages that don't come from Discord (terminal chat)."""
+    ms = int(time.time() * 1000) - DISCORD_EPOCH_MS
+    return (ms << 22) | (next(_counter) & 0x3FFFFF)
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+class ContextDB:
+    def __init__(self, path: str, owner: str):
+        """`owner` is the id of the character this database belongs to."""
+        self.conn = sqlite3.connect(path)
+        self.conn.row_factory = sqlite3.Row
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        columns = {r[1] for r in self.conn.execute("PRAGMA table_info(messages)")}
+        quoted_owner = "'" + owner.replace("'", "''") + "'"
+        self.conn.executescript(MIGRATE_V1.format(owner=quoted_owner) if "is_self" in columns else SCHEMA)
+        self.conn.commit()
+
+    def close(self) -> None:
+        self.conn.close()
+
+    # --- messages -------------------------------------------------------------------------
+
+    def add_message(self, message_id: int, channel_id: int, guild_id: int | None, author_id: int | None,
+                    author_name: str, content: str, character: str | None = None,
+                    created_at: str | None = None) -> None:
+        """Store a message (idempotent; a later copy that knows which character wrote it fills that in)."""
+        self.conn.execute(
+            "INSERT INTO messages VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(message_id) DO UPDATE SET "
+            "character = COALESCE(messages.character, excluded.character)",
+            (message_id, channel_id, guild_id, author_id, author_name, character, content,
+             created_at or now_iso()),
+        )
+        self.conn.commit()
+
+    def edit_message(self, message_id: int, content: str) -> None:
+        self.conn.execute("UPDATE messages SET content = ? WHERE message_id = ?", (content, message_id))
+        self.conn.commit()
+
+    def delete_message(self, message_id: int) -> None:
+        self.conn.execute("DELETE FROM messages WHERE message_id = ?", (message_id,))
+        self.conn.commit()
+
+    def get_message(self, message_id: int) -> sqlite3.Row | None:
+        return self.conn.execute("SELECT * FROM messages WHERE message_id = ?", (message_id,)).fetchone()
+
+    def recent_messages(self, channel_id: int, after_id: int, limit: int) -> list[sqlite3.Row]:
+        """The newest `limit` messages after `after_id`, oldest first."""
+        rows = self.conn.execute(
+            "SELECT * FROM messages WHERE channel_id = ? AND message_id > ? ORDER BY message_id DESC LIMIT ?",
+            (channel_id, after_id, limit),
+        ).fetchall()
+        return rows[::-1]
+
+    def oldest_messages(self, channel_id: int, after_id: int, limit: int) -> list[sqlite3.Row]:
+        return self.conn.execute(
+            "SELECT * FROM messages WHERE channel_id = ? AND message_id > ? ORDER BY message_id LIMIT ?",
+            (channel_id, after_id, limit),
+        ).fetchall()
+
+    def count_after(self, channel_id: int, after_id: int) -> int:
+        return self.conn.execute(
+            "SELECT COUNT(*) FROM messages WHERE channel_id = ? AND message_id > ?", (channel_id, after_id)
+        ).fetchone()[0]
+
+    def last_message_id(self, channel_id: int) -> int | None:
+        return self.conn.execute(
+            "SELECT MAX(message_id) FROM messages WHERE channel_id = ?", (channel_id,)
+        ).fetchone()[0]
+
+    def known_channels(self) -> list[int]:
+        return [r[0] for r in self.conn.execute("SELECT DISTINCT channel_id FROM messages")]
+
+    # --- long-term memory (one summary per character per channel) ------------------------------
+
+    def get_summary(self, character: str, channel_id: int) -> tuple[str, int]:
+        row = self.conn.execute(
+            "SELECT summary, upto_id FROM summaries WHERE character = ? AND channel_id = ?", (character, channel_id)
+        ).fetchone()
+        return (row["summary"], row["upto_id"]) if row else ("", 0)
+
+    def set_summary(self, character: str, channel_id: int, summary: str, upto_id: int) -> None:
+        self.conn.execute(
+            "INSERT INTO summaries VALUES (?, ?, ?, ?, ?) ON CONFLICT(character, channel_id) DO UPDATE SET "
+            "summary = excluded.summary, upto_id = excluded.upto_id, updated_at = excluded.updated_at",
+            (character, channel_id, summary, upto_id, now_iso()),
+        )
+        self.conn.commit()
+
+    def all_summaries(self) -> list[sqlite3.Row]:
+        return self.conn.execute("SELECT character, channel_id, summary FROM summaries").fetchall()
+
+    def forget_channel(self, channel_id: int) -> None:
+        self.conn.execute("DELETE FROM messages WHERE channel_id = ?", (channel_id,))
+        self.conn.execute("DELETE FROM summaries WHERE channel_id = ?", (channel_id,))
+        self.conn.commit()
+
+    # --- per-user data (/forgetme) ----------------------------------------------------------
+
+    def user_message_ids(self, user_id: int) -> set[int]:
+        return {r[0] for r in self.conn.execute("SELECT message_id FROM messages WHERE author_id = ?", (user_id,))}
+
+    def author_names(self, user_id: int) -> set[str]:
+        """Every display name this user has had in stored messages."""
+        return {r[0] for r in self.conn.execute(
+            "SELECT DISTINCT author_name FROM messages WHERE author_id = ?", (user_id,))}
+
+    def forget_user(self, user_id: int, names: set[str]) -> int:
+        """Delete the user's messages, their whole DM history, and the character's replies that name them.
+        Returns the number of messages deleted."""
+        deleted = 0
+        dm_channels = [r[0] for r in self.conn.execute(
+            "SELECT DISTINCT channel_id FROM messages WHERE author_id = ? AND guild_id IS NULL", (user_id,))]
+        for channel_id in dm_channels:
+            deleted += self.conn.execute("DELETE FROM messages WHERE channel_id = ?", (channel_id,)).rowcount
+            self.conn.execute("DELETE FROM summaries WHERE channel_id = ?", (channel_id,))
+        deleted += self.conn.execute("DELETE FROM messages WHERE author_id = ?", (user_id,)).rowcount
+        for name in names:
+            deleted += self.conn.execute(
+                "DELETE FROM messages WHERE character IS NOT NULL AND instr(lower(content), lower(?)) > 0",
+                (name,)).rowcount
+        self.conn.commit()
+        return deleted
