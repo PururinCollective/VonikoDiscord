@@ -29,13 +29,13 @@ Repeat steps 1–3 once per character:
 Then:
 
 4. Make sure LM Studio's server is running at `http://192.168.88.193:1234` with a model loaded.
-5. Start every character at once. Each gets her own window, named after her:
+5. Start every character together in one window. They take turns (see **Taking turns** below):
 
    ```
    run.bat --char all
    ```
 
-   Or start one character in the current window:
+   Or start one character on her own:
 
    ```
    run.bat --char rin
@@ -45,9 +45,26 @@ The first run creates `.venv`. Every start installs anything missing from `requi
 
 `--char <name>` loads `config.<name>.json` and keeps memory in `context/context.<name>.db`. You can also give the file directly: `run.bat --config config.rin.json`.
 
-`--char all` starts one window for every `config.<name>.json` except `config.example.json`, so a new character is included automatically. All of them share the one model loaded in LM Studio.
+`--char all` runs every `config.<name>.json` except `config.example.json`, so a new character is included automatically. Characters whose token isn't set yet are skipped with a warning. All of them share the one model loaded in LM Studio.
 
-**To stop a character, press `Q` in her window.** She logs out of Discord and saves her memory cleanly, and the window closes. If she stops because of an error (for example a bad token), her window stays open so you can read it. Ctrl+C still works, but `Q` is the tidy way.
+**To stop, press `Q` in the window.** Everyone logs out of Discord and their memories are saved cleanly. With a single character, `Q` stops just her. Ctrl+C still works, but `Q` is the tidy way.
+
+Don't run the same character twice (for example `--char all` plus `--char rin` in another window). She'd answer every message twice.
+
+## Taking turns
+
+With `--char all`, a neutral **director** ([director.py](director.py)) decides who speaks in each channel, so the characters don't all write at once and talk past each other:
+
+1. **Wait:** it waits until the chat has been quiet for `debounce_seconds`, so a few quick messages in a row get one answer.
+2. **Choose:** it picks who answers and in what order:
+   - whoever is replied to or @mentioned goes first;
+   - then the others who were called, in the order their names come up;
+   - everyone else just reads.
+3. **One at a time:** only one character writes at a time, and only she shows "typing…". The next speaker starts after the previous one has posted, with that reply already in front of her.
+4. **Characters answering characters:** if a reply calls another character by name, she answers next, about a second later, up to `max_bot_chain` character messages in a row.
+5. **Interruptions:** if a person says something new while a round is going, the rest of that round is dropped, and the characters answer the new message instead.
+
+Running characters one at a time (`--char rin`) works as before, without turn-taking: each answers as soon as she's called.
 
 ## When they reply
 
@@ -73,8 +90,6 @@ Call several at once ("Sakurako and Nijika, come here!") and they'll all answer.
 - **`reply_to_bots`:** with this on, she answers any bot that calls her, not only the other characters. The same chain limit applies.
 
 **She always knows which message she's answering**, even when several people (or characters) talked in between.
-
-**Replies to other people's messages.** She can be asked about another member's message by replying to it with her name, e.g. "nijika, can you look why it crashes?". She sees the first 300 characters of the replied-to message, plus its images, so a reply to someone's screenshot works.
 
 **Replies to other people's messages.** She can be asked about another member's message by replying to it with her name, e.g. "nijika, can you look why it crashes?". She sees the first 300 characters of the replied-to message, plus its images, so a reply to someone's screenshot works.
 
@@ -203,6 +218,7 @@ When you add a character, add her wiki source and copyright line to [persona/LIC
 - `brain.py`: builds the character's prompt, cleans replies, writes long-term memory
 - `llm.py`: LM Studio API client
 - `websearch.py`: the web search tool (DuckDuckGo / SearXNG / Brave, plus reading result pages)
+- `director.py`: turn-taking when all characters run together (`--char all`)
 - `memory.py`: the `context/context.<char>.db` memory databases (SQLite)
 - `persona/*.md`: character sheets
 - `config.example.json`: template for a new character's config

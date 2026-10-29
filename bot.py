@@ -1,8 +1,9 @@
-"""An anime character bot for Discord (Oomuro Sakurako, Shima Rin, ...), powered by a local LM Studio model.
-Each character runs in her own process, with config.<char>.json and memory in context.<char>.db.
+"""Anime character bots for Discord (Oomuro Sakurako, Shima Rin, ...), powered by a local LM Studio model.
+Each character has her own config.<char>.json and memory in context/context.<char>.db.
 
     python bot.py --char sakurako            run Sakurako on Discord
-    python bot.py --config config.rin.json   same, with an explicit config file
+    python bot.py --char all                 run every character together, taking turns (see director.py)
+    python bot.py --config config.rin.json   run one character from an explicit config file
     python bot.py --char rin --cli           chat with Rin in the terminal
 """
 import argparse
@@ -24,6 +25,7 @@ from discord import app_commands
 from PIL import Image
 
 from brain import Character, forget_user
+from director import Director
 from llm import LMStudioClient
 from memory import ContextDB, make_snowflake, now_iso
 
@@ -84,6 +86,28 @@ class NameTrigger:
                 if at != -1 and (at <= 3 or sentence[at + len(name):] in ("", *JP_HONORIFICS)):
                     return True
         return False
+
+    def position(self, text: str) -> int:
+        """Where her name first appears in the text (a large number if it doesn't), for speaking order."""
+        lowered = text.lower()
+        spots = [m.start() for name in self.latin
+                 if (m := re.search(r"\b" + r"[\s-]+".join(map(re.escape, name)), lowered))]
+        spots += [at for name in self.cjk if (at := text.find(name)) != -1]
+        return min(spots, default=10**6)
+
+
+def has_console() -> bool:
+    return sys.platform == "win32" and bool(sys.stdin) and sys.stdin.isatty()
+
+
+async def wait_for_q() -> None:
+    """Return once Q is pressed in this console window (Windows only)."""
+    import msvcrt
+    while True:
+        while msvcrt.kbhit():
+            if msvcrt.getwch().lower() == "q":
+                return
+        await asyncio.sleep(0.2)
 
 
 def available_characters(folder: Path) -> list[str]:
@@ -175,9 +199,12 @@ class ForgetMeView(discord.ui.View):
 
 
 class CharacterBot(discord.Client):
-    def __init__(self, dcfg: dict, character: Character, db: ContextDB, db_path: Path, vision: bool):
+    def __init__(self, dcfg: dict, character: Character, db: ContextDB, db_path: Path, vision: bool,
+                 watch_keys: bool = True):
         self.cfg = dcfg
         self.vision = vision
+        self.watch_keys = watch_keys  # off when several characters share one window (one Q stops them all)
+        self.director = None          # set by Director when characters run together
         intents = discord.Intents.default()
         intents.message_content = True
         super().__init__(intents=intents, allowed_mentions=discord.AllowedMentions(
@@ -222,7 +249,8 @@ class CharacterBot(discord.Client):
                 view=ForgetMeView(self, interaction.user), ephemeral=True)
 
     async def setup_hook(self):
-        self.keyboard_task = asyncio.create_task(self.watch_keyboard())
+        if self.watch_keys:
+            self.keyboard_task = asyncio.create_task(self.watch_keyboard())
         try:
             synced = await self.tree.sync()
             self.log.info("Registered slash commands: %s", ", ".join("/" + c.name for c in synced))
@@ -231,17 +259,12 @@ class CharacterBot(discord.Client):
 
     async def watch_keyboard(self):
         """Press Q in the console window to log out and save cleanly (Windows console only)."""
-        if sys.platform != "win32" or not sys.stdin or not sys.stdin.isatty():
+        if not has_console():
             return
-        import msvcrt
         self.log.info("Press Q in this window to quit.")
-        while not self.is_closed():
-            while msvcrt.kbhit():
-                if msvcrt.getwch().lower() == "q":
-                    self.log.info("Q pressed: logging out of Discord and closing %s...", self.db_path.name)
-                    await self.close()
-                    return
-            await asyncio.sleep(0.2)
+        await wait_for_q()
+        self.log.info("Q pressed: logging out of Discord and closing %s...", self.db_path.name)
+        await self.close()
 
     # --- which messages she sees and answers ------------------------------------------------
 
@@ -257,7 +280,8 @@ class CharacterBot(discord.Client):
         """True when someone is talking to her directly: DM, @mention, reply to her, or her name."""
         if isinstance(message.channel, discord.DMChannel) or any(u.id == self.user.id for u in message.mentions):
             return True
-        if message.guild and any(r.is_bot_managed() and r in message.guild.me.roles for r in message.role_mentions):
+        guild = self.get_guild(message.guild.id) if message.guild else None  # this bot's view, not another's
+        if guild and any(r.is_bot_managed() and r in guild.me.roles for r in message.role_mentions):
             return True  # people often pick the bot's auto-created role instead of the bot when typing @Name
         ref = message.reference.resolved if message.reference else None
         if isinstance(ref, discord.Message) and ref.author.id == self.user.id:
@@ -352,17 +376,50 @@ class CharacterBot(discord.Client):
             return
         if not self.remember(message) or message.author.id == self.user.id:
             return
-        if message.author.bot:
-            # The other characters are bots too. Answer one only when she talks to this character, and stop
-            # after max_bot_chain bot messages in a row, so two characters can't keep talking forever.
-            if self.bot_chain(message.channel) >= self.cfg.get("max_bot_chain", 3):
-                return
-            if not self.cfg.get("reply_to_bots", False):
-                if self.cfg.get("reply_to_characters", True) and self.addressed(message):
-                    self.schedule(message)
-                return
-        if self.should_reply(message):
+        if self.director:  # running together with other characters: the director decides who speaks
+            self.director.message_seen(message)
+            return
+        # stop after max_bot_chain bot messages in a row, so two characters can't keep talking forever
+        if message.author.bot and self.bot_chain(message.channel) >= self.cfg.get("max_bot_chain", 3):
+            return
+        if self.wants_to_answer(message):
             self.schedule(message)
+
+    def wants_to_answer(self, message: discord.Message) -> bool:
+        if not message.author.bot:
+            return self.should_reply(message)
+        if self.cfg.get("reply_to_bots", False):
+            return self.should_reply(message)
+        # the other characters are bots too: answer one only when she talks to this character
+        return self.cfg.get("reply_to_characters", True) and self.addressed(message)
+
+    def call_position(self, message: discord.Message) -> int:
+        """How early she's called in the message: a reply to her or an @mention first, then where her name is."""
+        ref = message.reference.resolved if message.reference else None
+        if isinstance(ref, discord.Message) and ref.author.id == self.user.id:
+            return -2
+        if any(u.id == self.user.id for u in message.mentions):
+            return -1
+        return self.triggers.position(message.content)
+
+    def posted(self, sent: discord.Message) -> None:
+        """Store a message she just sent, and let the other characters see it right away."""
+        self.remember(sent)
+        if self.director:
+            self.director.share(self, sent)
+
+    async def answer(self, message: discord.Message) -> None:
+        """Answer a message the director picked for her. Message objects belong to the bot that received them,
+        and replying through another bot's copy would post as that bot, so she uses her own copy."""
+        own = next((m for m in reversed(self.cached_messages) if m.id == message.id), None)
+        if own is None:
+            channel = self.get_channel(message.channel.id)
+            try:
+                own = await channel.fetch_message(message.id) if channel else None
+            except discord.HTTPException:
+                own = None
+        if own is not None:
+            await self.respond(own)
 
     def bot_chain(self, channel) -> int:
         """How many bot messages in a row end this channel, i.e. since a person last said something."""
@@ -410,7 +467,10 @@ class CharacterBot(discord.Client):
             latest = missed[-1]
             if (self.cfg.get("reply_to_missed", True) and not latest.author.bot and self.addressed(latest)
                     and datetime.now(timezone.utc) - latest.created_at < max_age):
-                self.schedule(latest)
+                if self.director:
+                    self.director.message_seen(latest)
+                else:
+                    self.schedule(latest)
 
     # --- replying -----------------------------------------------------------------------------
 
@@ -457,7 +517,7 @@ class CharacterBot(discord.Client):
         images = await self.collect_images(message)
 
         async def say_searching(text: str):  # "wait, let me look that up!" while the search runs
-            self.remember(await channel.send(text))
+            self.posted(await channel.send(text))
 
         async with channel.typing():
             reply = await self.character.reply(channel.id, self.describe_place(channel), message.id, images,
@@ -469,7 +529,7 @@ class CharacterBot(discord.Client):
         quote = channel.last_message_id != message.id
         for i, chunk in enumerate(split_message(reply)):
             sent = await (message.reply(chunk) if i == 0 and quote else channel.send(chunk))
-            self.remember(sent)
+            self.posted(sent)
         task = asyncio.create_task(self.character.maybe_summarize(channel.id))
         self.background.add(task)
         task.add_done_callback(self.background.discard)
@@ -534,31 +594,8 @@ def move_old_db(base_dir: Path, db_path: Path, char_id: str):
     print(f"Moved {old.name} to {db_path.relative_to(base_dir)}")
 
 
-def main():
-    here = Path(__file__).resolve().parent
-    parser = argparse.ArgumentParser(description="Run an anime character bot on Discord, or chat with her "
-                                                 "in the terminal.")
-    who = parser.add_mutually_exclusive_group()
-    who.add_argument("--char", help="character to run, e.g. sakurako or rin (loads config.<char>.json); "
-                                    "'run.bat --char all' starts every character")
-    who.add_argument("--config", help="config file to load, e.g. config.sakurako.json")
-    parser.add_argument("--cli", action="store_true", help="chat in the terminal instead of Discord")
-    parser.add_argument("--user", help="your name in --cli mode")
-    parser.add_argument("--say", help="with --cli: send one message, print the reply, and exit")
-    args = parser.parse_args()
-
-    choices = ", ".join(available_characters(here)) or "none yet (copy config.example.json to config.<char>.json)"
-    if args.config:
-        config_path = Path(args.config).resolve()
-    elif args.char and args.char.lower() == "all":
-        sys.exit("To start every character, each in her own window, run:  run.bat --char all")
-    elif args.char:
-        config_path = here / f"config.{args.char.lower()}.json"
-    else:
-        parser.error(f"choose a character with --char ({choices}) or --config")
-    if not config_path.exists():
-        sys.exit(f"{config_path} not found. Available characters: {choices}")
-
+def load_character(config_path: Path) -> tuple[dict, Character, ContextDB, Path]:
+    """Read a character's config and open her memory. Returns (config, character, database, database path)."""
     cfg = load_config(config_path)
     base_dir = config_path.parent
     char_cfg = cfg["character"]
@@ -575,8 +612,97 @@ def main():
             other = None
         if other and other.get("id") != char_cfg["id"]:
             others.append(other)
-    character = Character(char_cfg, cfg, db, LMStudioClient(cfg["llm"]), base_dir, others)
+    return cfg, Character(char_cfg, cfg, db, LMStudioClient(cfg["llm"]), base_dir, others), db, db_path
 
+
+def setup_discord_logging():
+    discord.utils.setup_logging(level=logging.INFO)
+    for chatty in ("ddgs", "primp"):  # the web search libraries log every request they make
+        logging.getLogger(chatty).setLevel(logging.WARNING)
+    discord.VoiceClient.warn_nacl = discord.VoiceClient.warn_dave = False  # they never join voice
+
+
+def run_all(folder: Path):
+    """Every character in one process, taking turns through the director, with one Q to stop them all."""
+    setup_discord_logging()
+    bots, dbs = [], []
+    for name in available_characters(folder):
+        cfg, character, db, db_path = load_character(folder / f"config.{name}.json")
+        dbs.append(db)
+        token = cfg["discord"].get("token", "").strip()
+        if problem := token_problem(token):
+            log.warning("Skipping %s: discord.token in config.%s.json %s", character.name, name, problem)
+            continue
+        bots.append((CharacterBot(cfg["discord"], character, db, db_path, cfg["llm"].get("vision", True),
+                                  watch_keys=False), token))
+    if not bots:
+        sys.exit("No character has a usable bot token.")
+    Director([bot for bot, _ in bots], debounce=min(bot.debounce for bot, _ in bots),
+             max_bot_chain=min(bot.cfg.get("max_bot_chain", 3) for bot, _ in bots))
+
+    async def run_one(bot: CharacterBot, token: str):
+        try:
+            async with bot:
+                await bot.start(token)
+        except discord.LoginFailure:
+            bot.log.error("Discord rejected %s's bot token (it was reset, or copied incompletely). %s",
+                          bot.character.name, GET_TOKEN)
+        except discord.PrivilegedIntentsRequired:
+            bot.log.error("Turn on Message Content Intent for %s: discord.com/developers > the app > Bot > "
+                          "Privileged Gateway Intents.", bot.character.name)
+
+    async def stop_on_q():
+        if has_console():
+            log.info("Running %s together. Press Q in this window to stop them all.",
+                     ", ".join(bot.character.name for bot, _ in bots))
+            await wait_for_q()
+            log.info("Q pressed: logging everyone out...")
+            await asyncio.gather(*(bot.close() for bot, _ in bots))
+
+    async def together():
+        keys = asyncio.create_task(stop_on_q())
+        await asyncio.gather(*(run_one(bot, token) for bot, token in bots))
+        keys.cancel()
+
+    try:
+        asyncio.run(together())
+        log.info("Everyone has logged out. Bye!")
+    except KeyboardInterrupt:
+        pass
+    finally:
+        for db in dbs:
+            db.close()  # flushes SQLite's journal into the database file
+
+
+def main():
+    here = Path(__file__).resolve().parent
+    parser = argparse.ArgumentParser(description="Run an anime character bot on Discord, or chat with her "
+                                                 "in the terminal.")
+    who = parser.add_mutually_exclusive_group()
+    who.add_argument("--char", help="character to run, e.g. sakurako or rin (loads config.<char>.json), "
+                                    "or 'all' to run every character together, taking turns")
+    who.add_argument("--config", help="config file to load, e.g. config.sakurako.json")
+    parser.add_argument("--cli", action="store_true", help="chat in the terminal instead of Discord")
+    parser.add_argument("--user", help="your name in --cli mode")
+    parser.add_argument("--say", help="with --cli: send one message, print the reply, and exit")
+    args = parser.parse_args()
+
+    choices = ", ".join(available_characters(here)) or "none yet (copy config.example.json to config.<char>.json)"
+    if args.char and args.char.lower() == "all":
+        if args.cli:
+            sys.exit("--cli talks to one character: pick one with --char")
+        run_all(here)
+        return
+    if args.config:
+        config_path = Path(args.config).resolve()
+    elif args.char:
+        config_path = here / f"config.{args.char.lower()}.json"
+    else:
+        parser.error(f"choose a character with --char ({choices}, or all) or --config")
+    if not config_path.exists():
+        sys.exit(f"{config_path} not found. Available characters: {choices}")
+
+    cfg, character, db, db_path = load_character(config_path)
     try:
         if args.cli:
             sys.stdout.reconfigure(encoding="utf-8")
@@ -588,10 +714,7 @@ def main():
         token = cfg["discord"].get("token", "").strip()
         if problem := token_problem(token):
             sys.exit(f"discord.token in {config_path.name} {problem}\n{GET_TOKEN}")
-        discord.utils.setup_logging(level=logging.INFO)
-        for chatty in ("ddgs", "primp"):  # the web search libraries log every request they make
-            logging.getLogger(chatty).setLevel(logging.WARNING)
-        discord.VoiceClient.warn_nacl = discord.VoiceClient.warn_dave = False  # she never joins voice
+        setup_discord_logging()
         bot = CharacterBot(cfg["discord"], character, db, db_path, cfg["llm"].get("vision", True))
         try:
             bot.run(token, log_handler=None)
