@@ -34,6 +34,7 @@ SAFESEARCH = {  # our setting -> each provider's value
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
                          "Chrome/130.0 Safari/537.36"}
 MAX_PAGE_BYTES = 2 * 1024 * 1024
+DEFAULT_BACKEND = "wikipedia,duckduckgo,yahoo,brave,startpage"  # real Wikipedia first, then web results
 
 
 class _PageText(HTMLParser):
@@ -86,7 +87,11 @@ class WebSearch:
         if self.provider not in SAFESEARCH:
             raise ValueError(f"web_search.provider must be one of {', '.join(SAFESEARCH)}")
         self.safesearch = SAFESEARCH[self.provider][cfg.get("safesearch", "on")]
-        self.region = cfg.get("region", "wt-wt")
+        # "country-language"; the language part also picks the Wikipedia (us-en -> en.wikipedia.org)
+        self.region = cfg.get("region", "us-en")
+        # which engines the duckduckgo provider (the ddgs package) asks, in order; "auto" would add
+        # Grokipedia and random others
+        self.backend = cfg.get("backend", DEFAULT_BACKEND)
         self.searxng_url = cfg.get("searxng_url", "").rstrip("/")
         self.brave_api_key = cfg.get("brave_api_key", "")
         self.max_results = cfg.get("max_results", 5)
@@ -99,7 +104,8 @@ class WebSearch:
         if self.provider == "duckduckgo":
             from ddgs import DDGS
             hits = await asyncio.to_thread(lambda: DDGS().text(
-                query, region=self.region, safesearch=self.safesearch, max_results=self.max_results))
+                query, region=self.region, safesearch=self.safesearch, max_results=self.max_results,
+                backend=self.backend))
             return [{"title": h.get("title", ""), "url": h.get("href", ""), "snippet": h.get("body", "")}
                     for h in hits or []]
         async with aiohttp.ClientSession(timeout=self.timeout, headers=HEADERS) as http:

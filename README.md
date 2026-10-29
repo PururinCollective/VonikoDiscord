@@ -86,7 +86,9 @@ The characters can look things up online: news, release dates, prices, weather, 
 - **Local network.** Result pages on your local network (localhost, `192.168.x.x`, ...) are never fetched.
 - **Untrusted pages.** Page text is marked as untrusted, and she's told never to follow instructions inside it.
 
-**Other providers:** set `web_search.provider` to `"searxng"` with your own `searxng_url`, or to `"brave"` with a free `brave_api_key` from <https://brave.com/search/api/>. Set `web_search.enabled` to `false` to turn searching off for a character.
+**How the default provider works:** it uses the `ddgs` package, which scrapes several free search engines: real Wikipedia first, then DuckDuckGo, with Yahoo, Brave and Startpage as backups. These scrapers sometimes come back empty, especially after many searches in a short time. If every engine fails, she says she couldn't look it up.
+
+**Other providers:** set `web_search.provider` to `"searxng"` with your own `searxng_url`, or to `"brave"` with a free `brave_api_key` from <https://brave.com/search/api/>. Both are official APIs, so they're more reliable. Set `web_search.enabled` to `false` to turn searching off for a character.
 
 ## Slash commands
 
@@ -141,7 +143,9 @@ This uses the same brain and memory database, in a private "terminal" channel. T
 | `llm.temperature`, `top_p`, `max_tokens`, `extra_params` | Sampling settings (`extra_params` is merged into the API request as-is) |
 | `web_search.enabled` | Let her search the web |
 | `web_search.provider` | `"duckduckgo"` (no key), `"searxng"` (with `searxng_url`) or `"brave"` (with `brave_api_key`) |
-| `web_search.safesearch`, `region` | `"on"` / `"moderate"` / `"off"`, and the DuckDuckGo region (`"wt-wt"` = no region, `"jp-jp"`, `"my-en"`, ...) |
+| `web_search.safesearch` | `"on"` / `"moderate"` / `"off"` |
+| `web_search.region` | `"country-language"`, e.g. `"us-en"` (default), `"my-en"`, `"jp-jp"`. The language part also picks which Wikipedia is used (`jp-jp` → ja.wikipedia.org). Don't use DuckDuckGo's `"wt-wt"`: it makes ddgs look up `wt.wikipedia.org`, which doesn't exist |
+| `web_search.backend` | Engines the `duckduckgo` provider asks: `"wikipedia,duckduckgo,yahoo,brave,startpage"` by default. Available: `wikipedia`, `duckduckgo`, `yahoo`, `brave`, `startpage`, `mojeek`, `grokipedia`. `"auto"` adds Grokipedia (xAI's AI-written encyclopedia) and random others |
 | `web_search.max_results`, `read_pages`, `max_page_chars` | How many results she sees, how many top pages she reads, and how much of each page |
 | `web_search.max_searches` | Search rounds per reply |
 | `web_search.waiting_messages` | What she says while she looks something up (one is picked at random) |

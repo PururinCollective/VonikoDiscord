@@ -537,6 +537,8 @@ def main():
         if problem := token_problem(token):
             sys.exit(f"discord.token in {config_path.name} {problem}\n{GET_TOKEN}")
         discord.utils.setup_logging(level=logging.INFO)
+        for chatty in ("ddgs", "primp"):  # the web search libraries log every request they make
+            logging.getLogger(chatty).setLevel(logging.WARNING)
         discord.VoiceClient.warn_nacl = discord.VoiceClient.warn_dave = False  # she never joins voice
         bot = CharacterBot(cfg["discord"], character, db, db_path, cfg["llm"].get("vision", True))
         try:
