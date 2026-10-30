@@ -61,8 +61,10 @@ def token_problem(token: str) -> str | None:
 
 
 SENTENCE_END = re.compile(r"[.!?。！？\n]+")
-HONORIFIC = re.compile(r"-(chan|san|sama|senpai|sensei|kun|tan)$")
-JP_HONORIFICS = ("ちゃん", "さん", "様", "さま", "先輩", "せんぱい")
+# "Rin-chan", "Naruto-niichan", "Red-ojisan", "Naruto-nii-chan"
+HONORIFIC = re.compile(r"(-(o?nii|o?nee|o?ji|o?ba|aniki|aneki)?(chan|san|sama|senpai|sensei|kun|tan|dono)?)+$")
+JP_HONORIFICS = ("ちゃん", "さん", "様", "さま", "先輩", "せんぱい", "くん", "君", "殿", "兄ちゃん", "兄さん", "にいちゃん",
+                 "姉ちゃん", "姉さん", "ねえちゃん", "おじさん", "おじちゃん")
 
 
 class NameTrigger:

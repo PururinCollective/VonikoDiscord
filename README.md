@@ -8,6 +8,7 @@ AI characters from anime and TV that chat in the Pururin Collective Discord serv
 | Shima Rin (志摩リン) | *Yuru Camp△* | [persona/rin.md](persona/rin.md) | `config.rin.json` | `context/context.rin.db` |
 | Ijichi Nijika (伊地知虹夏) | *Bocchi the Rock!* | [persona/nijika.md](persona/nijika.md) | `config.nijika.json` | `context/context.nijika.db` |
 | Raymond "Red" Reddington | *The Blacklist* | [persona/raymond.md](persona/raymond.md) | `config.raymond.json` | `context/context.raymond.db` |
+| Naruto Uzumaki (うずまきナルト) | *Naruto* / *Boruto* | [persona/naruto.md](persona/naruto.md) | `config.naruto.json` | `context/context.naruto.db` |
 
 - Each character is a separate Discord bot with its own name, avatar and token.
 - Each runs in its own process, with its own config file and its own memory database. After a restart, each picks up where it left off.
@@ -109,7 +110,7 @@ Each character replies:
 
 - **Counts:** "Rin, …", "hey Rin, …", "…what do you think, Rin?", "櫻子、…".
 - **Doesn't count:** just mentioning her ("nijika, can you ask sakurako about rin camping?" calls only Nijika).
-- **Honorifics:** like `-chan`, `-sama`, ちゃん and 様 are fine.
+- **Honorifics:** like `-chan`, `-sama`, `-niichan`, `-ojisan`, ちゃん, 様 and 兄ちゃん are fine.
 - **Similar words:** "Rin's", "string" or "プリン" never call Rin.
 
 Call several at once ("Sakurako and Nijika, come here!") and they'll all answer.
@@ -252,7 +253,7 @@ Get channel and server IDs by turning on **Developer Mode** (Discord Settings �
 
 - **Code and everything else** (`*.py`, `run.bat`, `config.example.json`, the docs): [MIT](LICENSE).
 - **Character sheets** (`persona/*.md`): [CC BY-SA 4.0](persona/LICENSE.md), because they're based on Fandom wiki articles under CC BY-SA. That file credits the wiki pages.
-- **The characters** (Oomuro Sakurako, Shima Rin, Ijichi Nijika, Raymond Reddington), their names and their series belong to their creators and publishers, and neither license covers them. This is an unofficial fan project, not affiliated with or endorsed by them.
+- **The characters** (Oomuro Sakurako, Shima Rin, Ijichi Nijika, Raymond Reddington, Naruto Uzumaki), their names and their series belong to their creators and publishers, and neither license covers them. This is an unofficial fan project, not affiliated with or endorsed by them.
 - **Never publish** `dump/` (saved wiki pages, including Fandom's site code and images), `config.*.json` (bot tokens) or `context/` (members' messages). All three are in `.gitignore`.
 - `profile/` (the wiki text from `wiki2md.py`, copied word for word) is in `.gitignore` too, so it stays out of the MIT-licensed repo.
 

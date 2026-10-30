@@ -188,6 +188,8 @@ def table(el) -> list[str]:
         return [b for cells in rows for cell in cells for b in blocks(cell)]
     grid = [[cell_text(cell) for cell in cells] for cells in rows]
     grid = [row for row in grid if any(row)]
+    if not grid:
+        return []
     keep = [i for i in range(len(grid[0])) if any(row[i] for row in grid[1:])] or range(len(grid[0]))
     grid = [[row[i] for i in keep] for row in grid]  # e.g. a "Preview" column of embedded players
     lines = [f"| {' | '.join(grid[0])} |", f"|{' --- |' * len(keep)}"]
