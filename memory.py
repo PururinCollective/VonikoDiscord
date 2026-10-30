@@ -108,6 +108,15 @@ class ContextDB:
         ).fetchall()
         return rows[::-1]
 
+    def people(self, channel_id: int, limit: int = 500) -> dict[str, int]:
+        """Display name -> user id of everyone who wrote among the newest `limit` messages here (the newer
+        name wins). Someone who used /forgetme isn't in it."""
+        rows = self.conn.execute(
+            "SELECT author_name, author_id FROM messages WHERE channel_id = ? AND author_id IS NOT NULL "
+            "ORDER BY message_id DESC LIMIT ?", (channel_id, limit),
+        ).fetchall()
+        return {name: author_id for name, author_id in reversed(rows)}
+
     def oldest_messages(self, channel_id: int, after_id: int, limit: int) -> list[sqlite3.Row]:
         return self.conn.execute(
             "SELECT * FROM messages WHERE channel_id = ? AND message_id > ? ORDER BY message_id LIMIT ?",

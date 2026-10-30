@@ -124,7 +124,9 @@ Call several at once ("Sakurako and Nijika, come here!") and they'll all answer.
 
 **Replies to other people's messages.** She can be asked about another member's message by replying to it with her name, e.g. "nijika, can you look why it crashes?". She sees the first 300 characters of the replied-to message, plus its images, so a reply to someone's screenshot works.
 
-Each waits `debounce_seconds` for people to finish typing and then answers once. If other messages arrived in the meantime, she replies to the specific message she's answering.
+Each waits `debounce_seconds` for people to finish typing and then answers once. She answers a person with Discord's reply feature, so they're tagged (`always_reply`, with `mention_author` for the ping). In DMs, and when answering another character, she only does that if other messages arrived in the meantime.
+
+**Tagging people.** A character can tag someone by writing @ and their display name, e.g. "Nijika, call Ryukura over" → "@Ryukura hey! …". The bot turns that into a real Discord mention for anyone who has talked in that channel (and isn't forgotten with `/forgetme`). @everyone and @here are never pinged.
 
 **Images.** She looks at up to 4 images attached to the message she's answering (or to the message it replies to), when `llm.vision` is on and LM Studio's loaded model is a vision model (type `vlm` in LM Studio, e.g. `huihui-qwen3.8-27b-abliterated`).
 
@@ -206,6 +208,7 @@ This uses the same brain and memory database, in a private "terminal" channel. T
 | `discord.max_bot_chain` | After this many bot messages in a row, no character starts another reply until a person speaks (default 3) |
 | `discord.random_reply_chance` | 0.0–1.0 chance to jump into any other message |
 | `discord.mention_author` | Ping the person when she uses Discord's reply feature |
+| `discord.always_reply` | Answer people in server channels with Discord's reply feature, quoting their message (default `true`). With `mention_author` on, that tags them. `false` = only when other messages came in between. Other characters' messages are never quoted just for this, since a reply to a character calls it back |
 | `discord.catch_up_*`, `reply_to_missed` | Resume behaviour after a restart |
 | `llm.base_url` | LM Studio server |
 | `llm.model` | Model id. Empty = whichever chat model LM Studio has loaded (re-checked every 30 seconds) |

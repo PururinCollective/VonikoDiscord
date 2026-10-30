@@ -28,6 +28,7 @@
     "max_bot_chain": 3,
     "random_reply_chance": 0.0,
     "mention_author": false,
+    "always_reply": true,
     "debounce_seconds": 2.5,
     "catch_up_on_start": true,
     "catch_up_limit": 50,

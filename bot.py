@@ -344,6 +344,20 @@ class CharacterBot(discord.Client):
             return f'the thread "{channel.name}" in #{channel.parent.name} of the "{channel.guild.name}" Discord server'
         return f'#{channel.name} in the "{channel.guild.name}" Discord server'
 
+    def link_mentions(self, text: str, channel) -> str:
+        """The model writes "@Anime4000" as plain text, which tags nobody. Turn it into a real Discord mention
+        for anyone who has talked in this channel (people or characters, not herself)."""
+        if "@" not in text:
+            return text
+        people = {name: user_id for name, user_id in self.db.people(channel.id).items()
+                  if user_id != self.user.id and name.lower() not in ("everyone", "here")}
+        if not people:
+            return text
+        ids = {name.lower(): user_id for name, user_id in people.items()}
+        names = "|".join(map(re.escape, sorted(people, key=len, reverse=True)))  # "Rin Fan" before "Rin"
+        return re.sub(r"(?<![\w<@])@(%s)(?!\w)" % names, lambda m: f"<@{ids[m.group(1).lower()]}>", text,
+                      flags=re.IGNORECASE)
+
     # --- events -------------------------------------------------------------------------------
 
     async def on_ready(self):
@@ -517,10 +531,15 @@ class CharacterBot(discord.Client):
         if not reply:
             self.log.warning("Model returned an empty reply in %s", self.describe_place(channel))
             return
-        # quote the message only if others have talked since, so it's clear who she's answering
-        quote = channel.last_message_id != message.id
+        reply = self.link_mentions(reply, channel)
+        # Answer a person with Discord's reply feature, which tags them (always_reply, mention_author). Other
+        # characters and DMs get it only if others have talked since, so it's clear who she's answering: a
+        # reply to a character would call that character back every time.
+        to_person = not message.author.bot and not isinstance(channel, discord.DMChannel)
+        quote = (to_person and self.cfg.get("always_reply", True)) or channel.last_message_id != message.id
+        reference = message.to_reference(fail_if_not_exists=False)  # deleted meanwhile: just post it
         for i, chunk in enumerate(split_message(reply)):
-            sent = await (message.reply(chunk) if i == 0 and quote else channel.send(chunk))
+            sent = await channel.send(chunk, reference=reference if i == 0 and quote else None)
             self.posted(sent)
         task = asyncio.create_task(self.character.maybe_summarize(channel.id))
         self.background.add(task)
