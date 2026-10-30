@@ -1,15 +1,16 @@
-# Anime character bots
+# Character bots
 
-AI anime characters that chat in the Pururin Collective Discord server, powered by your local LM Studio model:
+AI characters from anime and TV that chat in the Pururin Collective Discord server, powered by your local LM Studio model:
 
 | Character | From | Persona | Config | Memory |
 |---|---|---|---|---|
 | Oomuro Sakurako (大室櫻子) | *Yuru Yuri* | [persona/sakurako.md](persona/sakurako.md) | `config.sakurako.json` | `context/context.sakurako.db` |
 | Shima Rin (志摩リン) | *Yuru Camp△* | [persona/rin.md](persona/rin.md) | `config.rin.json` | `context/context.rin.db` |
 | Ijichi Nijika (伊地知虹夏) | *Bocchi the Rock!* | [persona/nijika.md](persona/nijika.md) | `config.nijika.json` | `context/context.nijika.db` |
+| Raymond "Red" Reddington | *The Blacklist* | [persona/raymond.md](persona/raymond.md) | `config.raymond.json` | `context/context.raymond.db` |
 
-- Each character is a separate Discord bot with her own name, avatar and token.
-- Each runs in her own process, with her own config file and her own memory database. After a restart she picks up where she left off.
+- Each character is a separate Discord bot with its own name, avatar and token.
+- Each runs in its own process, with its own config file and its own memory database. After a restart, each picks up where it left off.
 
 ## Setup
 
@@ -69,7 +70,7 @@ While the bots run, the window shows a live status screen ([tui.py](tui.py)) ins
 └───────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ┌─ Log ─────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │ 01:38:36 INFO director: Nijika, Sakurako answer(s) Anime4000, in that order                                       │
-│ 01:38:36 INFO brain: Compacting Sakurako's memory of #general (her prompt was 38,410 of 50,688 tokens)            │
+│ 01:38:36 INFO brain: Compacting Sakurako's memory of #general (the prompt was 38,410 of 50,688 tokens)            │
 │ 01:38:36 INFO brain: Updated Sakurako's memory of #general (52 message(s) folded in, 10 kept word for word)       │
 └───────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
  Q  quit   the log is printed again after quitting                                                         up 0:12:04
@@ -233,10 +234,10 @@ Get channel and server IDs by turning on **Developer Mode** (Discord Settings �
 ## Adding another character
 
 1. Write `persona/<id>.md`. Copy the layout of [persona/rin.md](persona/rin.md): Profile, Personality, Friends, How you talk.
-   - To work from her wiki article, save the page into `dump/` (browser **Save page as**) and run `.venv\Scripts\python wiki2md.py`. It writes `profile/<first name>.md`: just the article text (infobox, sections, trivia), a few KB instead of several MB of site code. Rewrite it in your own words for the persona; don't paste it.
-2. Copy `config.example.json` to `config.<id>.json`. Set the `character` block, `discord.token`, `name_triggers`, `status_text` and her `web_search.waiting_messages`.
-3. Create and invite her bot as in **Setup**, then run `run.bat --char <id>`. From now on `run.bat --char all` starts her too.
-4. Add her to the list in the Terms of Service and Privacy Policy, and add her wiki source and copyright line to `persona/LICENSE.md`.
+   - To work from the character's wiki article, save the page into `dump/` (browser **Save page as**) and run `.venv\Scripts\python wiki2md.py`. It writes `profile/<first name>.md`: just the article text (infobox, sections, trivia), a few KB instead of several MB of site code. Pages about the same character from different wikis go into one file. Rewrite it in your own words for the persona; don't paste it.
+2. Copy `config.example.json` to `config.<id>.json`. Set the `character` block, `discord.token`, `name_triggers`, `status_text` and `web_search.waiting_messages`.
+3. Create and invite the bot as in **Setup**, then run `run.bat --char <id>`. From now on `run.bat --char all` starts it too.
+4. Add the character to the list in the Terms of Service and Privacy Policy, and add the wiki source and copyright line to `persona/LICENSE.md`.
 
 ## Terms and privacy
 
@@ -248,11 +249,11 @@ Get channel and server IDs by turning on **Developer Mode** (Discord Settings �
 
 - **Code and everything else** (`*.py`, `run.bat`, `config.example.json`, the docs): [MIT](LICENSE).
 - **Character sheets** (`persona/*.md`): [CC BY-SA 4.0](persona/LICENSE.md), because they're based on Fandom wiki articles under CC BY-SA. That file credits the wiki pages.
-- **The characters** (Oomuro Sakurako, Shima Rin, Ijichi Nijika), their names and their series belong to their creators and publishers, and neither license covers them. This is an unofficial fan project, not affiliated with or endorsed by them.
+- **The characters** (Oomuro Sakurako, Shima Rin, Ijichi Nijika, Raymond Reddington), their names and their series belong to their creators and publishers, and neither license covers them. This is an unofficial fan project, not affiliated with or endorsed by them.
 - **Never publish** `dump/` (saved wiki pages, including Fandom's site code and images), `config.*.json` (bot tokens) or `context/` (members' messages). All three are in `.gitignore`.
 - `profile/` (the wiki text from `wiki2md.py`, copied word for word) is in `.gitignore` too, so it stays out of the MIT-licensed repo.
 
-When you add a character, add her wiki source and copyright line to [persona/LICENSE.md](persona/LICENSE.md).
+When you add a character, add the wiki source and copyright line to [persona/LICENSE.md](persona/LICENSE.md).
 
 ## Files
 

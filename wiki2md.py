@@ -14,12 +14,12 @@ import re
 import sys
 import unicodedata
 from pathlib import Path
-from urllib.parse import unquote, urlsplit
 
 import lxml.html
 
 # Sections that are only links, pictures or episode lists.
-SKIP_SECTIONS = {"references", "external links", "gallery", "navigation", "media", "images", "appearances"}
+SKIP_SECTIONS = {"references", "external links", "gallery", "navigation", "media", "images", "appearances", "see also"}
+QUOTE_MARKS = {"“", "”", "„", "‟", '"', "«", "»"}
 
 # Page furniture inside the article.
 DROP_CLASSES = {
@@ -93,7 +93,7 @@ def render_inline(el) -> str:
     if tag in ("ul", "ol"):
         return BR + BR.join(tidy(inline(li)) for li in el.iterchildren("li")) + BR
     if tag in BLOCK_TAGS:
-        return f" {BR.join(blocks(el))} "
+        return f" {BR.join(b.replace(chr(10), BR) for b in blocks(el))} "
     text = inline(el)
     if tag in ("b", "strong"):
         return emphasis(text, "**")
@@ -178,6 +178,11 @@ def table(el) -> list[str]:
     rows = [cells for cells in rows if cells]
     if not rows:
         return []
+    marks = [cell for cells in rows for cell in cells if cell.text_content().strip() in QUOTE_MARKS]
+    if marks:
+        # A quote box: big “ and „ in the side cells, the quote and "~ speaker" in the middle.
+        lines = [line for cells in rows for cell in cells if cell not in marks for b in blocks(cell) for line in b.splitlines()]
+        return ["\n".join(f"> {line}" for line in lines)] if lines else []
     if el.xpath(".//table") or len({len(cells) for cells in rows}) != 1 or len(rows[0]) < 2:
         # Collapsible boxes and layout tables: keep their content as plain blocks.
         return [b for cells in rows for cell in cells for b in blocks(cell)]
@@ -241,14 +246,16 @@ def drop_furniture(root) -> None:
                 el.drop_tree()
 
 
-def drop_subpage_tabs(article, url: str) -> None:
-    """Drops the "Overview | Gallery" bar some wikis put above the article."""
-    page = unquote(urlsplit(url).path).rstrip("/")
-    if not page:
+def drop_banners(article) -> None:
+    """Drops what sits above the infobox: "Overview | Gallery" tabs, cleanup notices."""
+    if not article.xpath(".//aside[contains(@class,'portable-infobox')]"):
         return
-    for child in article.iterchildren("div"):
-        links = [unquote(urlsplit(a.get("data-savepage-href") or a.get("href") or "").path) for a in child.iter("a")]
-        if links and all(link.startswith(page + "/") for link in links) and len(child.text_content().split()) <= 6:
+    for child in list(article):
+        if not isinstance(child.tag, str):
+            continue
+        if child.xpath("self::aside[contains(@class,'portable-infobox')]|.//aside[contains(@class,'portable-infobox')]"):
+            break
+        if child.tag != "p":
             child.drop_tree()
 
 
@@ -294,7 +301,7 @@ def convert(path: Path) -> tuple[str, str]:
     site = next(iter(doc.xpath("//meta[@property='og:site_name']/@content")), "Fandom")
 
     drop_furniture(article)
-    drop_subpage_tabs(article, url)
+    drop_banners(article)
     parts = skip_sections(blocks(article))
     source = f"<{url}>" if url else f"`{path.name}`"
     head = [f"# {title}", f"From {site}: {source}. Community content under CC BY-SA, by the wiki's contributors."]
@@ -323,6 +330,8 @@ def main() -> int:
         return 1
     args.out.mkdir(parents=True, exist_ok=True)
     failed = 0
+    # Pages about the same character (one per wiki) go into one file.
+    profiles: dict[Path, list[tuple[Path, str]]] = {}
     for page in pages:
         try:
             title, text = convert(page)
@@ -330,10 +339,14 @@ def main() -> int:
             print(f"{page.name}: {e}", file=sys.stderr)
             failed += 1
             continue
-        target = args.out / f"{slug(title)}.md"
+        profiles.setdefault(args.out / f"{slug(title)}.md", []).append((page, text))
+    for target, parts in profiles.items():
+        text = "\n---\n\n".join(text for _, text in parts)
         target.write_text(text, encoding="utf-8", newline="\n")
-        print(f"{page.name} -> {target.relative_to(here) if target.is_relative_to(here) else target}"
-              f" ({page.stat().st_size // 1024:,} KB -> {len(text.encode()) // 1024:,} KB)")
+        size = sum(page.stat().st_size for page, _ in parts) // 1024
+        names = " + ".join(page.name for page, _ in parts)
+        print(f"{names} -> {target.relative_to(here) if target.is_relative_to(here) else target}"
+              f" ({size:,} KB -> {len(text.encode()) // 1024:,} KB)")
     return 1 if failed else 0
 
 

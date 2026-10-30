@@ -1,8 +1,8 @@
 # Privacy Policy: Pururin Collective character bots
 
-**Effective date:** 29 October 2026
+**Effective date:** 30 October 2026
 
-This policy explains what the AI character bots run for the Pururin Collective Discord server collect, why, and what you can do about it. Currently these are "Oomuro Sakurako", "Shima Rin" and "Ijichi Nijika" (each a "Bot", together the "Bots"). The Bots are run by the owner of the Pururin Collective Discord server (the "Operator").
+This policy explains what the AI character bots run for the Pururin Collective Discord server collect, why, and what you can do about it. Currently these are "Oomuro Sakurako", "Shima Rin", "Ijichi Nijika" and "Raymond Reddington" (each a "Bot", together the "Bots"). The Bots are run by the owner of the Pururin Collective Discord server (the "Operator").
 
 **In short:** The Bots save messages from the channels they can read, and their DMs, so they can remember conversations. Each Bot keeps its own database on the Operator's own computer. Your messages are processed by an AI model on that computer, not by a cloud AI service. Nothing is sold or shared. You can delete your data at any time with the `/forgetme` command on any of the Bots.
 

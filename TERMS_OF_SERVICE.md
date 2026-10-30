@@ -1,17 +1,18 @@
 # Terms of Service: Pururin Collective character bots
 
-**Effective date:** 29 October 2026
+**Effective date:** 30 October 2026
 
-These terms cover your use of the AI character bots run for the Pururin Collective Discord server. Currently these are "Oomuro Sakurako", "Shima Rin" and "Ijichi Nijika" (each a "Bot", together the "Bots"). The Bots are run by the owner of the Pururin Collective Discord server (the "Operator"). If you talk to a Bot, or use a server or DM where one is present, you agree to these terms. If you don't agree, don't interact with the Bots.
+These terms cover your use of the AI character bots run for the Pururin Collective Discord server. Currently these are "Oomuro Sakurako", "Shima Rin", "Ijichi Nijika" and "Raymond Reddington" (each a "Bot", together the "Bots"). The Bots are run by the owner of the Pururin Collective Discord server (the "Operator"). If you talk to a Bot, or use a server or DM where one is present, you agree to these terms. If you don't agree, don't interact with the Bots.
 
 ## 1. What the Bots are
 
 - The Bots are fan-made AI chat characters:
   - Oomuro Sakurako from *Yuru Yuri*;
   - Shima Rin from *Yuru Camp△* (*Laid-Back Camp*);
-  - Ijichi Nijika from *Bocchi the Rock!*.
+  - Ijichi Nijika from *Bocchi the Rock!*;
+  - Raymond "Red" Reddington from *The Blacklist*.
 - Their replies come from an AI language model that runs on the Operator's own hardware.
-- They are a hobby project. They are not affiliated with or endorsed by Namori, Ichijinsha, Afro, Aki Hamaji, Houbunsha, the producers of the anime, or anyone else who owns these series. Those rights holders own the characters and all related trademarks.
+- They are a hobby project. They are not affiliated with or endorsed by Namori, Ichijinsha, Afro, Aki Hamaji, Houbunsha, Jon Bokenkamp, Sony Pictures Television, Universal Television, NBC, the producers of the anime and TV series, or anyone else who owns these series. Those rights holders own the characters and all related trademarks.
 - They are not affiliated with or endorsed by Discord Inc.
 
 ## 2. AI-generated content
@@ -19,6 +20,7 @@ These terms cover your use of the AI character bots run for the Pururin Collecti
 - Everything the Bots say is written by an AI model while playing a fictional character. Their replies can be wrong, silly, inconsistent or inappropriate.
 - Their replies do not represent the views of the Operator, the server staff or the characters' creators.
 - Do not rely on the Bots for facts or for medical, legal, financial, safety or any other advice. This includes camping and outdoor advice: always check real safety information before you go.
+- Raymond Reddington plays a fictional criminal. His stories are fiction, and the Bots will not help with real crimes.
 - The Bots can search the web and repeat what they find. Search results and websites can be wrong, out of date or misread by the AI, so check anything important at the source.
 - The Bots are AIs, not real people.
 

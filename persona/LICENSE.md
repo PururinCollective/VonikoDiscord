@@ -1,6 +1,6 @@
 # Persona files license
 
-The character sheets in this folder (`sakurako.md`, `rin.md`, `nijika.md`) are licensed under the [Creative Commons Attribution-ShareAlike 4.0 International License](https://creativecommons.org/licenses/by-sa/4.0/) (CC BY-SA 4.0).
+The character sheets in this folder (`sakurako.md`, `rin.md`, `nijika.md`, `raymond.md`) are licensed under the [Creative Commons Attribution-ShareAlike 4.0 International License](https://creativecommons.org/licenses/by-sa/4.0/) (CC BY-SA 4.0).
 
 You may share and adapt them, including for commercial use, as long as you:
 
@@ -16,6 +16,8 @@ Written by Anime4000. The character details come from these Fandom wiki articles
 - [Sakurako Ōmuro](https://yuruyuri.fandom.com/wiki/Sakurako_%C5%8Cmuro), YuruYuri Wiki
 - [Rin Shima](https://yuru-camp.fandom.com/wiki/Rin_Shima), Yuru Camp Wiki
 - [Nijika Ijichi](https://bocchi-the-rock.fandom.com/wiki/Nijika_Ijichi), Bocchi the Rock! Wiki
+- [Raymond Reddington](https://the-blacklist.fandom.com/wiki/Raymond_Reddington), The Blacklist Wiki
+- [Raymond Reddington](https://villains.fandom.com/wiki/Raymond_Reddington), Villains Wiki
 
 ## The characters themselves
 
@@ -24,5 +26,6 @@ This license covers only the wording of these files. The characters, their names
 - Oomuro Sakurako, *Yuru Yuri*: © Namori / Ichijinsha
 - Shima Rin, *Yuru Camp△*: © Afro / Houbunsha
 - Ijichi Nijika, *Bocchi the Rock!*: © Aki Hamaji / Houbunsha
+- Raymond Reddington, *The Blacklist* (created by Jon Bokenkamp): © Sony Pictures Television / Universal Television
 
 This is an unofficial fan project, not affiliated with or endorsed by any of them.

@@ -693,7 +693,7 @@ def run_all(folder: Path, use_tui: bool):
 
 def main():
     here = Path(__file__).resolve().parent
-    parser = argparse.ArgumentParser(description="Run an anime character bot on Discord, or chat with her "
+    parser = argparse.ArgumentParser(description="Run a character bot on Discord, or chat with one "
                                                  "in the terminal.")
     who = parser.add_mutually_exclusive_group()
     who.add_argument("--char", help="character to run, e.g. sakurako or rin (loads config.<char>.json), "
