@@ -9,6 +9,8 @@ You may share and adapt them, including for commercial use, as long as you:
 - say if you changed them;
 - share your version under the same license.
 
+The blank template `example.md` isn't a character sheet. Like the rest of the project, it's under the [MIT License](../LICENSE).
+
 ## Attribution
 
 Written by Anime4000. The character details come from these Fandom wiki articles, which are community content under CC BY-SA. Their text was summarized and rewritten, not copied:

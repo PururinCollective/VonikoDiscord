@@ -239,7 +239,7 @@ Get channel and server IDs by turning on **Developer Mode** (Discord Settings â†
 
 ## Adding another character
 
-1. Write `persona/<id>.md`. Copy the layout of [persona/rin.md](persona/rin.md): Profile, Personality, Friends, How you talk.
+1. Copy [persona/example.md](persona/example.md) to `persona/<id>.md` and fill it in: Profile, Your story (optional), Personality, Friends, How you talk. The notes in it (`<!-- ... -->`) explain each part and are removed before the file reaches the model. [persona/rin.md](persona/rin.md) is a finished example.
    - To work from the character's wiki article, save the page into `dump/` (browser **Save page as**) and run `.venv\Scripts\python wiki2md.py`. It writes `profile/<first name>.md`: just the article text (infobox, sections, trivia), a few KB instead of several MB of site code. Pages about the same character from different wikis go into one file. Rewrite it in your own words for the persona; don't paste it.
 2. Copy `config/example.json` to `config/<id>.json`. Set the `character` block, `discord.token`, `name_triggers`, `status_text` and `web_search.waiting_messages`.
 3. Create and invite the bot as in **Setup**, then run `run.bat --char <id>`. From now on `run.bat --char all` starts it too.
@@ -253,8 +253,8 @@ Get channel and server IDs by turning on **Developer Mode** (Discord Settings â†
 
 ## License
 
-- **Code and everything else** (`*.py`, `run.bat`, `config/example.json`, the docs): [MIT](LICENSE).
-- **Character sheets** (`persona/*.md`): [CC BY-SA 4.0](persona/LICENSE.md), because they're based on Fandom wiki articles under CC BY-SA. That file credits the wiki pages.
+- **Code and everything else** (`*.py`, `run.bat`, `config/example.json`, `persona/example.md`, the docs): [MIT](LICENSE).
+- **Character sheets** (the other `persona/*.md`): [CC BY-SA 4.0](persona/LICENSE.md), because they're based on Fandom wiki articles under CC BY-SA. That file credits the wiki pages.
 - **The characters** (Oomuro Sakurako, Shima Rin, Ijichi Nijika, Raymond Reddington, Naruto Uzumaki), their names and their series belong to their creators and publishers, and neither license covers them. This is an unofficial fan project, not affiliated with or endorsed by them.
 - **Never publish** `dump/` (saved wiki pages, including Fandom's site code and images), `config/*.json` (bot tokens) or `context/` (members' messages). All three are in `.gitignore`.
 - `profile/` (the wiki text from `wiki2md.py`, copied word for word) is in `.gitignore` too, so it stays out of the MIT-licensed repo.
@@ -271,5 +271,6 @@ When you add a character, add the wiki source and copyright line to [persona/LIC
 - `tui.py`: the status screen
 - `memory.py`: the `context/context.<char>.db` memory databases (SQLite)
 - `persona/*.md`: character sheets
+- `persona/example.md`: template for a new character sheet
 - `wiki2md.py`: turns saved wiki pages (`dump/*.html`) into short Markdown (`profile/*.md`)
 - `config/example.json`: template for a new character's config

@@ -122,7 +122,9 @@ class Character:
             r"^\W*(?:%s)\W*?[:：]\s*\**" % "|".join(map(re.escape, sorted(aliases, key=len, reverse=True))),
             re.IGNORECASE)
         self.own_name_re = re.compile(r"\b(?:%s)\b" % "|".join(map(re.escape, aliases)), re.IGNORECASE)
-        self.persona = (base_dir / char_cfg["persona_file"]).read_text(encoding="utf-8").strip()
+        persona = (base_dir / char_cfg["persona_file"]).read_text(encoding="utf-8")
+        # <!-- notes --> are for whoever edits the file (see persona/example.md), not for the model
+        self.persona = re.sub(r"\n{3,}", "\n\n", re.sub(r"\n?<!--.*?-->", "", persona, flags=re.DOTALL)).strip()
         self.db = db
         self.llm = llm
         self.history_messages = mem.get("history_messages", 40)
