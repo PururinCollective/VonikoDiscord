@@ -1,5 +1,6 @@
+config/*.json
+!config/example.json
 config.*.json
-!config.example.json
 context/
 context*.db*
 .venv/

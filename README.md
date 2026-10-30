@@ -4,11 +4,11 @@ AI characters from anime and TV that chat in the Pururin Collective Discord serv
 
 | Character | From | Persona | Config | Memory |
 |---|---|---|---|---|
-| Oomuro Sakurako (大室櫻子) | *Yuru Yuri* | [persona/sakurako.md](persona/sakurako.md) | `config.sakurako.json` | `context/context.sakurako.db` |
-| Shima Rin (志摩リン) | *Yuru Camp△* | [persona/rin.md](persona/rin.md) | `config.rin.json` | `context/context.rin.db` |
-| Ijichi Nijika (伊地知虹夏) | *Bocchi the Rock!* | [persona/nijika.md](persona/nijika.md) | `config.nijika.json` | `context/context.nijika.db` |
-| Raymond "Red" Reddington | *The Blacklist* | [persona/raymond.md](persona/raymond.md) | `config.raymond.json` | `context/context.raymond.db` |
-| Naruto Uzumaki (うずまきナルト) | *Naruto* / *Boruto* | [persona/naruto.md](persona/naruto.md) | `config.naruto.json` | `context/context.naruto.db` |
+| Oomuro Sakurako (大室櫻子) | *Yuru Yuri* | [persona/sakurako.md](persona/sakurako.md) | `config/sakurako.json` | `context/context.sakurako.db` |
+| Shima Rin (志摩リン) | *Yuru Camp△* | [persona/rin.md](persona/rin.md) | `config/rin.json` | `context/context.rin.db` |
+| Ijichi Nijika (伊地知虹夏) | *Bocchi the Rock!* | [persona/nijika.md](persona/nijika.md) | `config/nijika.json` | `context/context.nijika.db` |
+| Raymond "Red" Reddington | *The Blacklist* | [persona/raymond.md](persona/raymond.md) | `config/raymond.json` | `context/context.raymond.db` |
+| Naruto Uzumaki (うずまきナルト) | *Naruto* / *Boruto* | [persona/naruto.md](persona/naruto.md) | `config/naruto.json` | `context/context.naruto.db` |
 
 - Each character is a separate Discord bot with its own name, avatar and token.
 - Each runs in its own process, with its own config file and its own memory database. After a restart, each picks up where it left off.
@@ -22,7 +22,7 @@ Repeat steps 1–3 once per character:
 1. Go to <https://discord.com/developers/applications>, click **New Application**, and name it after the character, e.g. `Shima Rin`.
 2. On the **Bot** tab:
    - Set the username and avatar.
-   - Click **Reset Token** and paste the token into her config file, e.g. `config.rin.json` → `discord.token`. A bot token has three parts separated by dots. The Public Key, Application ID or Client Secret won't work.
+   - Click **Reset Token** and paste the token into her config file, e.g. `config/rin.json` → `discord.token`. A bot token has three parts separated by dots. The Public Key, Application ID or Client Secret won't work.
    - Under **Privileged Gateway Intents**, turn on **Message Content Intent**.
 3. Invite her to your server. Replace `APP_ID` with the Application ID from the **General Information** tab:
    `https://discord.com/oauth2/authorize?client_id=APP_ID&scope=bot+applications.commands&permissions=274877975552`
@@ -45,9 +45,9 @@ Then:
 
 The first run creates `.venv`. Every start installs anything missing from `requirements.txt` (`discord.py`, `pillow`, `ddgs`, `rich`).
 
-`--char <name>` loads `config.<name>.json` and keeps memory in `context/context.<name>.db`. You can also give the file directly: `run.bat --config config.rin.json`.
+`--char <name>` loads `config/<name>.json` and keeps memory in `context/context.<name>.db`. You can also give the file directly: `run.bat --config config/rin.json`.
 
-`--char all` runs every `config.<name>.json` except `config.example.json`, so a new character is included automatically. Characters whose token isn't set yet are skipped with a warning. All of them share the one model loaded in LM Studio.
+`--char all` runs every `config/<name>.json` except `config/example.json`, so a new character is included automatically. Characters whose token isn't set yet are skipped with a warning. All of them share the one model loaded in LM Studio.
 
 **To stop, press `Q` in the window.** Everyone logs out of Discord and their memories are saved cleanly. With a single character, `Q` stops just her. Ctrl+C still works, but `Q` is the tidy way.
 
@@ -115,7 +115,7 @@ Each character replies:
 
 Call several at once ("Sakurako and Nijika, come here!") and they'll all answer.
 
-**Characters talking to each other.** Each character knows who the other characters are (from their `config.*.json` files next to hers).
+**Characters talking to each other.** Each character knows who the other characters are (from the other files in `config/`).
 
 - **Asking another character:** asked to ask another character something, she calls her by name ("Sakurako, can you tell Anime4000…"), and the other one answers. This is `reply_to_characters`, on by default.
 - **Chain limit:** after `max_bot_chain` (default 3) bot messages in a row, no character starts another reply until a person speaks, so they can't talk forever.
@@ -189,7 +189,9 @@ run.bat --char rin --cli
 
 This uses the same brain and memory database, in a private "terminal" channel. Type `/forget` to clear that chat and `/quit` to exit. You can also send a single message with `--say "hi"`.
 
-## config.&lt;char&gt;.json
+## config/&lt;char&gt;.json
+
+Paths in it (`persona_file`, `db_path`) are relative to the project folder. Older versions kept these files next to `bot.py` as `config.<char>.json`; they're moved into `config/` the next time you run it.
 
 | Key | Meaning |
 |---|---|
@@ -197,7 +199,7 @@ This uses the same brain and memory database, in a private "terminal" channel. T
 | `character.name`, `full_name` | Name used in prompts, and for removing a "Name:" prefix the model sometimes copies into replies |
 | `character.series` | Her series, shown to the other characters so they know who she is |
 | `character.persona_file` | Her character sheet |
-| `discord.token` | Her bot token (keep it secret; `config.*.json` is in `.gitignore`, except the example) |
+| `discord.token` | Her bot token (keep it secret; `config/*.json` is in `.gitignore`, except `example.json`) |
 | `discord.name_triggers` | Words that count as calling her |
 | `discord.status_text` | Her Discord status |
 | `discord.guild_ids` | Only work in these server IDs. Empty = any server she's in |
@@ -239,7 +241,7 @@ Get channel and server IDs by turning on **Developer Mode** (Discord Settings �
 
 1. Write `persona/<id>.md`. Copy the layout of [persona/rin.md](persona/rin.md): Profile, Personality, Friends, How you talk.
    - To work from the character's wiki article, save the page into `dump/` (browser **Save page as**) and run `.venv\Scripts\python wiki2md.py`. It writes `profile/<first name>.md`: just the article text (infobox, sections, trivia), a few KB instead of several MB of site code. Pages about the same character from different wikis go into one file. Rewrite it in your own words for the persona; don't paste it.
-2. Copy `config.example.json` to `config.<id>.json`. Set the `character` block, `discord.token`, `name_triggers`, `status_text` and `web_search.waiting_messages`.
+2. Copy `config/example.json` to `config/<id>.json`. Set the `character` block, `discord.token`, `name_triggers`, `status_text` and `web_search.waiting_messages`.
 3. Create and invite the bot as in **Setup**, then run `run.bat --char <id>`. From now on `run.bat --char all` starts it too.
 4. Add the character to the list in the Terms of Service and Privacy Policy, and add the wiki source and copyright line to `persona/LICENSE.md`.
 
@@ -251,10 +253,10 @@ Get channel and server IDs by turning on **Developer Mode** (Discord Settings �
 
 ## License
 
-- **Code and everything else** (`*.py`, `run.bat`, `config.example.json`, the docs): [MIT](LICENSE).
+- **Code and everything else** (`*.py`, `run.bat`, `config/example.json`, the docs): [MIT](LICENSE).
 - **Character sheets** (`persona/*.md`): [CC BY-SA 4.0](persona/LICENSE.md), because they're based on Fandom wiki articles under CC BY-SA. That file credits the wiki pages.
 - **The characters** (Oomuro Sakurako, Shima Rin, Ijichi Nijika, Raymond Reddington, Naruto Uzumaki), their names and their series belong to their creators and publishers, and neither license covers them. This is an unofficial fan project, not affiliated with or endorsed by them.
-- **Never publish** `dump/` (saved wiki pages, including Fandom's site code and images), `config.*.json` (bot tokens) or `context/` (members' messages). All three are in `.gitignore`.
+- **Never publish** `dump/` (saved wiki pages, including Fandom's site code and images), `config/*.json` (bot tokens) or `context/` (members' messages). All three are in `.gitignore`.
 - `profile/` (the wiki text from `wiki2md.py`, copied word for word) is in `.gitignore` too, so it stays out of the MIT-licensed repo.
 
 When you add a character, add the wiki source and copyright line to [persona/LICENSE.md](persona/LICENSE.md).
@@ -270,4 +272,4 @@ When you add a character, add the wiki source and copyright line to [persona/LIC
 - `memory.py`: the `context/context.<char>.db` memory databases (SQLite)
 - `persona/*.md`: character sheets
 - `wiki2md.py`: turns saved wiki pages (`dump/*.html`) into short Markdown (`profile/*.md`)
-- `config.example.json`: template for a new character's config
+- `config/example.json`: template for a new character's config

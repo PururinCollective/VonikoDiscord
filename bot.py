@@ -1,9 +1,9 @@
 """Anime character bots for Discord (Oomuro Sakurako, Shima Rin, ...), powered by a local LM Studio model.
-Each character has her own config.<char>.json and memory in context/context.<char>.db.
+Each character has her own config/<char>.json and memory in context/context.<char>.db.
 
     python bot.py --char sakurako            run Sakurako on Discord
     python bot.py --char all                 run every character together, taking turns (see director.py)
-    python bot.py --config config.rin.json   run one character from an explicit config file
+    python bot.py --config config/rin.json   run one character from an explicit config file
     python bot.py --char rin --cli           chat with Rin in the terminal
     python bot.py --char all --no-tui        plain log lines instead of the status screen
 """
@@ -34,6 +34,8 @@ from memory import ContextDB, make_snowflake, now_iso
 log = logging.getLogger("bot")
 GET_TOKEN = "Get it from discord.com/developers > the character's app > Bot > Reset Token."
 CLI_CHANNEL_ID = 1
+HERE = Path(__file__).resolve().parent  # paths inside the configs (persona_file, db_path) are relative to this
+CONFIG_FOLDER = "config"
 DB_FOLDER = "context"
 MAX_IMAGES = 4                     # per message
 MAX_IMAGE_BYTES = 25 * 1024 * 1024
@@ -115,8 +117,19 @@ async def wait_for_q() -> None:
 
 
 def available_characters(folder: Path) -> list[str]:
-    return [p.name[len("config."):-len(".json")] for p in sorted(folder.glob("config.*.json"))
-            if p.name != "config.example.json"]
+    """The ids of the <char>.json files in the config folder, except example.json."""
+    return [p.stem for p in sorted(folder.glob("*.json")) if p.name != "example.json"]
+
+
+def move_old_configs(base_dir: Path):
+    """Earlier versions kept config.<char>.json next to bot.py. Move them into the config folder as <char>.json."""
+    folder = base_dir / CONFIG_FOLDER
+    for old in sorted(base_dir.glob("config.*.json")):
+        new = folder / old.name[len("config."):]
+        if not new.exists():
+            folder.mkdir(exist_ok=True)
+            old.rename(new)
+            print(f"Moved {old.name} to {CONFIG_FOLDER}/{new.name}")
 
 
 def open_all_databases(own_path: Path, own_db: ContextDB) -> list[ContextDB]:
@@ -610,15 +623,15 @@ def move_old_db(base_dir: Path, db_path: Path, char_id: str):
 def load_character(config_path: Path) -> tuple[dict, Character, ContextDB, Path]:
     """Read a character's config and open her memory. Returns (config, character, database, database path)."""
     cfg = load_config(config_path)
-    base_dir = config_path.parent
+    base_dir = HERE
     char_cfg = cfg["character"]
     db_path = base_dir / cfg["memory"].get("db_path", f"{DB_FOLDER}/context.{char_cfg['id']}.db")
     db_path.parent.mkdir(parents=True, exist_ok=True)
     move_old_db(base_dir, db_path, char_cfg["id"])
     db = ContextDB(str(db_path), owner=char_cfg["id"])
     others = []  # the other characters (their config files sit next to this one), so she knows who's around
-    for name in available_characters(base_dir):
-        path = base_dir / f"config.{name}.json"
+    for name in available_characters(config_path.parent):
+        path = config_path.parent / f"{name}.json"
         try:
             other = load_config(path)["character"] if path.resolve() != config_path else None
         except (OSError, ValueError, KeyError):
@@ -698,11 +711,11 @@ def run_all(folder: Path, use_tui: bool):
     """Every character in one process, taking turns through the director, with one Q to stop them all."""
     bots, dbs, skipped = [], [], {}
     for name in available_characters(folder):
-        cfg, character, db, db_path = load_character(folder / f"config.{name}.json")
+        cfg, character, db, db_path = load_character(folder / f"{name}.json")
         dbs.append(db)
         token = cfg["discord"].get("token", "").strip()
         if problem := token_problem(token):
-            skipped[character.name] = f"discord.token in config.{name}.json {problem}"
+            skipped[character.name] = f"discord.token in {CONFIG_FOLDER}/{name}.json {problem}"
             continue
         bots.append((make_bot(cfg, character, db, db_path), token))
     if not bots:
@@ -713,13 +726,12 @@ def run_all(folder: Path, use_tui: bool):
 
 
 def main():
-    here = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser(description="Run a character bot on Discord, or chat with one "
                                                  "in the terminal.")
     who = parser.add_mutually_exclusive_group()
-    who.add_argument("--char", help="character to run, e.g. sakurako or rin (loads config.<char>.json), "
+    who.add_argument("--char", help="character to run, e.g. sakurako or rin (loads config/<char>.json), "
                                     "or 'all' to run every character together, taking turns")
-    who.add_argument("--config", help="config file to load, e.g. config.sakurako.json")
+    who.add_argument("--config", help="config file to load, e.g. config/sakurako.json")
     parser.add_argument("--cli", action="store_true", help="chat in the terminal instead of Discord")
     parser.add_argument("--user", help="your name in --cli mode")
     parser.add_argument("--say", help="with --cli: send one message, print the reply, and exit")
@@ -727,16 +739,19 @@ def main():
     args = parser.parse_args()
     use_tui = not args.no_tui and sys.stdout.isatty()
 
-    choices = ", ".join(available_characters(here)) or "none yet (copy config.example.json to config.<char>.json)"
+    move_old_configs(HERE)
+    configs = HERE / CONFIG_FOLDER
+    choices = (", ".join(available_characters(configs))
+               or f"none yet (copy {CONFIG_FOLDER}/example.json to {CONFIG_FOLDER}/<char>.json)")
     if args.char and args.char.lower() == "all":
         if args.cli:
             sys.exit("--cli talks to one character: pick one with --char")
-        run_all(here, use_tui)
+        run_all(configs, use_tui)
         return
     if args.config:
         config_path = Path(args.config).resolve()
     elif args.char:
-        config_path = here / f"config.{args.char.lower()}.json"
+        config_path = configs / f"{args.char.lower()}.json"
     else:
         parser.error(f"choose a character with --char ({choices}, or all) or --config")
     if not config_path.exists():
@@ -755,7 +770,7 @@ def main():
     token = cfg["discord"].get("token", "").strip()
     if problem := token_problem(token):
         db.close()
-        sys.exit(f"discord.token in {config_path.name} {problem}\n{GET_TOKEN}")
+        sys.exit(f"discord.token in {args.config or f'{CONFIG_FOLDER}/{config_path.name}'} {problem}\n{GET_TOKEN}")
     run_bots([(make_bot(cfg, character, db, db_path), token)], [db], {}, None, use_tui)
 
 
