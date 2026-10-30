@@ -6,3 +6,4 @@ context*.db*
 .user/
 __pycache__/
 dump/
+profile/

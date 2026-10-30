@@ -233,6 +233,7 @@ Get channel and server IDs by turning on **Developer Mode** (Discord Settings â†
 ## Adding another character
 
 1. Write `persona/<id>.md`. Copy the layout of [persona/rin.md](persona/rin.md): Profile, Personality, Friends, How you talk.
+   - To work from her wiki article, save the page into `dump/` (browser **Save page as**) and run `.venv\Scripts\python wiki2md.py`. It writes `profile/<first name>.md`: just the article text (infobox, sections, trivia), a few KB instead of several MB of site code. Rewrite it in your own words for the persona; don't paste it.
 2. Copy `config.example.json` to `config.<id>.json`. Set the `character` block, `discord.token`, `name_triggers`, `status_text` and her `web_search.waiting_messages`.
 3. Create and invite her bot as in **Setup**, then run `run.bat --char <id>`. From now on `run.bat --char all` starts her too.
 4. Add her to the list in the Terms of Service and Privacy Policy, and add her wiki source and copyright line to `persona/LICENSE.md`.
@@ -249,6 +250,7 @@ Get channel and server IDs by turning on **Developer Mode** (Discord Settings â†
 - **Character sheets** (`persona/*.md`): [CC BY-SA 4.0](persona/LICENSE.md), because they're based on Fandom wiki articles under CC BY-SA. That file credits the wiki pages.
 - **The characters** (Oomuro Sakurako, Shima Rin, Ijichi Nijika), their names and their series belong to their creators and publishers, and neither license covers them. This is an unofficial fan project, not affiliated with or endorsed by them.
 - **Never publish** `dump/` (saved wiki pages, including Fandom's site code and images), `config.*.json` (bot tokens) or `context/` (members' messages). All three are in `.gitignore`.
+- `profile/` (the wiki text from `wiki2md.py`, copied word for word) is in `.gitignore` too, so it stays out of the MIT-licensed repo.
 
 When you add a character, add her wiki source and copyright line to [persona/LICENSE.md](persona/LICENSE.md).
 
@@ -262,4 +264,5 @@ When you add a character, add her wiki source and copyright line to [persona/LIC
 - `tui.py`: the status screen
 - `memory.py`: the `context/context.<char>.db` memory databases (SQLite)
 - `persona/*.md`: character sheets
+- `wiki2md.py`: turns saved wiki pages (`dump/*.html`) into short Markdown (`profile/*.md`)
 - `config.example.json`: template for a new character's config
