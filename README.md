@@ -96,7 +96,7 @@ With `--char all`, a neutral **director** ([director.py](director.py)) decides w
    - then the others who were called, in the order their names come up;
    - everyone else just reads.
 3. **One at a time:** only one character writes at a time, and only she shows "typing…". The next speaker starts after the previous one has posted, with that reply already in front of her.
-4. **Characters answering characters:** if a reply calls another character by name, she answers next, about a second later, up to `max_bot_chain` character messages in a row.
+4. **Characters answering characters:** if a reply calls another character by name, she answers next, about a second later, up to `max_bot_chain` messages between characters in a row (their answers to a person don't count).
 5. **Interruptions:** if a person says something new while a round is going, the rest of that round is dropped, and the characters answer the new message instead.
 
 Running characters one at a time (`--char rin`) works as before, without turn-taking: each answers as soon as she's called.
@@ -128,12 +128,12 @@ So "rin, how's school?" → Rin answers → "oh really? let me check" goes to Ri
 - **Full names win:** a name inside another character's full name doesn't call her. "Gotoh Hitori" calls only Gotoh, even though "hitori" is Hitori Bocchi's trigger.
 - **The two Bocchis:** "Bocchi" and "Hitori" (ぼっち, 一里) call Hitori Bocchi. Bocchi the Rock!'s Gotoh Hitori answers to "Gotoh" (後藤, ごとう) or "guitarhero". Nijika knows to call her bandmate "Gotoh-chan" here.
 
-Call several at once ("Sakurako and Nijika, come here!") and they'll all answer.
+Call several at once ("Sakurako and Nijika, come here!") and they'll all answer. A list of names counts as a whole when it starts or ends the sentence, if it has an "and" (or "&", "or", "dan") in it: "bocchi, my friends want to meet you: gotoh hitori, ijichi nijika, shima rin and naruto" calls all five. They answer in the order you named them. "hitori, gotoh wants to be friends" has no "and", so it calls only Bocchi.
 
 **Characters talking to each other.** Each character knows who the other characters are (from the other files in `config/`).
 
 - **Asking another character:** asked to ask another character something, she calls her by name ("Sakurako, can you tell Anime4000…"), and the other one answers. This is `reply_to_characters`, on by default.
-- **Chain limit:** after `max_bot_chain` (default 3) bot messages in a row, no character starts another reply until a person speaks, so they can't talk forever.
+- **Chain limit:** after `max_bot_chain` (default 3) messages between characters, no character starts another reply until a person speaks, so they can't talk forever. Their answers to a person (the ones quoting your message) don't count, so after five of them greet you, they still have 3 messages to talk among themselves.
 - **`reply_to_bots`:** with this on, she answers any bot that calls her, not only the other characters. The same chain limit applies.
 
 **She always knows which message she's answering**, even when several people (or characters) talked in between.
@@ -226,7 +226,7 @@ Paths in it (`persona_file`, `db_path`) are relative to the project folder. Olde
 | `discord.reply_to_dms` | Answer DMs |
 | `discord.reply_to_characters` | Answer another bot (e.g. another character) when it calls her by name, @mentions her or replies to her |
 | `discord.reply_to_bots` | Answer any bot the way she answers people (name, free-talk channels, random chance) |
-| `discord.max_bot_chain` | After this many bot messages in a row, no character starts another reply until a person speaks (default 3) |
+| `discord.max_bot_chain` | After this many messages between characters (or other bots), no character starts another reply until a person speaks (default 3). Answers to a person don't count |
 | `discord.random_reply_chance` | 0.0–1.0 chance to jump into any other message |
 | `discord.mention_author` | Ping the person when she uses Discord's reply feature |
 | `discord.always_reply` | Answer people in server channels with Discord's reply feature, quoting their message (default `true`). With `mention_author` on, that tags them. `false` = only when other messages came in between. Other characters' messages are never quoted just for this, since a reply to a character calls it back |

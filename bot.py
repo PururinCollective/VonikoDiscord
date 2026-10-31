@@ -28,7 +28,7 @@ from discord import app_commands
 from PIL import Image
 
 from brain import Character, forget_user
-from director import Director, channel_label
+from director import Director, answers_person, channel_label
 from llm import LMStudioClient
 from memory import ContextDB, make_snowflake, now_iso
 
@@ -67,16 +67,24 @@ def token_problem(token: str) -> str | None:
 SENTENCE_END = re.compile(r"[.!?。！？\n]+")
 STUTTER = re.compile(r"^(?:(\w)-(?=\1))+")  # "n-nijika", "b-b-bocchi"
 BREAKS, BREAK = ",，、;；:：", ","            # inside a sentence: names never run across these
+LIST_JOINERS = {BREAK, "and", "&", "or", "dan", "atau"}  # "Rin, Nijika and Naruto", "Rin dan Nijika"
 # "Rin-chan", "Naruto-niichan", "Red-ojisan", "Naruto-nii-chan"
 HONORIFIC = re.compile(r"(-(o?nii|o?nee|o?ji|o?ba|aniki|aneki)?(chan|san|sama|senpai|sensei|kun|tan|dono)?)+$")
 JP_HONORIFICS = ("ちゃん", "さん", "様", "さま", "先輩", "せんぱい", "くん", "君", "殿", "兄ちゃん", "兄さん", "にいちゃん",
                  "姉ちゃん", "姉さん", "ねえちゃん", "おじさん", "おじちゃん")
 
 
+def with_full_name(triggers: list[str], full_name: str) -> list[str]:
+    """Her triggers plus her full name both ways round, so "Gotoh Hitori" is read as one name (Gotoh's), not
+    as "gotoh" plus Bocchi's "hitori"."""
+    return [*triggers, *(n for n in (full_name, " ".join(full_name.split()[::-1])) if n)]
+
+
 class NameTrigger:
     """Decides whether a message is talking TO her by name, not just about her. Her name has to be one of
     the first 3 words of a sentence ("Rin, ...", "hey Rin, ...") or its last word ("... right, Rin?"),
-    so "nijika, can you ask sakurako about rin camping?" calls only Nijika."""
+    so "nijika, can you ask sakurako about rin camping?" calls only Nijika. A list of names counts as one:
+    "..., say hi to Gotoh, Nijika and Naruto" ends with the list, so it calls all three."""
 
     def __init__(self, triggers: list[str]):
         self.latin = [[HONORIFIC.sub("", w) for w in t.lower().split()] for t in triggers if t.isascii()]
@@ -88,15 +96,36 @@ class NameTrigger:
         for sentence in SENTENCE_END.split(text):
             # a comma stays in as a marker, so "hitori, gotoh ..." is never read as the name "Hitori Gotoh"
             words = [BREAK if t in BREAKS else HONORIFIC.sub("", STUTTER.sub("", t.strip("'’-")))
-                     for t in re.findall(rf"[\w'’-]+|[{BREAKS}]", sentence.lower())]
+                     for t in re.findall(rf"[\w'’-]+|[{BREAKS}&]", sentence.lower())]
             words = [w for w in words if w]  # "rin's" stays one word, so it isn't "rin"
-            for name in self.latin:
-                for i in range(len(words) - len(name) + 1):
-                    if words[i:i + len(name)] != name:
-                        continue
-                    first = i - words[:i].count(BREAK) < 3
-                    last = all(w == BREAK for w in words[i + len(name):])
-                    if (first or last) and not (others and others.covers(words, i, len(name))):
+            names = []  # (start, end, hers) left to right, the longest name winning where two overlap
+            i = 0
+            while i < len(words):
+                found = [(len(n), True) for n in self.latin if words[i:i + len(n)] == n]
+                found += [(len(n), False) for n in (others.latin if others else []) if words[i:i + len(n)] == n]
+                if not found:
+                    i += 1
+                    continue
+                length, hers = max(found)
+                names.append((i, i + length, hers))
+                i += length
+            # names with only commas and "and" between them; with an "and" in there, they're one list:
+            # "Rin, Nijika and Naruto" is a list, "hitori, gotoh wants ..." is two separate names
+            groups, is_list = [], []
+            for name in names:
+                between = words[groups[-1][-1][1]:name[0]] if groups else [""]
+                if all(w in LIST_JOINERS for w in between):
+                    groups[-1].append(name)
+                    is_list[-1] = is_list[-1] or any(w != BREAK for w in between)
+                else:
+                    groups.append([name])
+                    is_list.append(False)
+            for group, listed in zip(groups, is_list):
+                for part in [group] if listed else [[name] for name in group]:
+                    start, end = part[0][0], part[-1][1]
+                    first = start - words[:start].count(BREAK) < 3
+                    last = all(w == BREAK for w in words[end:])
+                    if (first or last) and any(hers for _, _, hers in part):
                         return True
             sentence = sentence.strip(" \t,，、:：…~～")
             for name in self.cjk:  # Japanese has no spaces: at the start, or at the end (maybe with ちゃん etc.)
@@ -104,11 +133,6 @@ class NameTrigger:
                 if at != -1 and (at <= 3 or sentence[at + len(name):] in ("", *JP_HONORIFICS)):
                     return True
         return False
-
-    def covers(self, words: list[str], start: int, length: int) -> bool:
-        """True if one of these names, longer than `length` words, takes in words[start:start + length]."""
-        return any(words[j:j + len(name)] == name for name in self.latin if len(name) > length
-                   for j in range(max(0, start + length - len(name)), start + 1))
 
     def position(self, text: str) -> int:
         """Where her name first appears in the text (a large number if it doesn't), for speaking order."""
@@ -257,11 +281,9 @@ class CharacterBot(discord.Client):
         self.guild_ids = set(dcfg.get("guild_ids") or [])
         self.channel_ids = set(dcfg.get("channel_ids") or [])
         self.free_talk_ids = set(dcfg.get("free_talk_channel_ids") or [])
-        self.triggers = NameTrigger(dcfg.get("name_triggers") or [])
-        others_names = [t for o in character.others  # with their full names, both ways round ("Gotoh Hitori")
-                        for t in [*(o.get("name_triggers") or []), o.get("full_name", ""),
-                                  " ".join(o.get("full_name", "").split()[::-1])] if t]
-        self.others_triggers = NameTrigger(others_names)
+        self.triggers = NameTrigger(with_full_name(dcfg.get("name_triggers") or [], character.full_name))
+        self.others_triggers = NameTrigger([t for o in character.others for t in
+                                            with_full_name(o.get("name_triggers") or [], o.get("full_name", ""))])
         self.debounce = dcfg.get("debounce_seconds", 2.5)
         self.pending: dict[int, discord.Message] = {}      # channel id -> newest message to answer
         self.last_trigger: dict[int, float] = {}
@@ -497,13 +519,14 @@ class CharacterBot(discord.Client):
             await self.respond(own)
 
     def bot_chain(self, channel) -> int:
-        """How many bot messages in a row end this channel, i.e. since a person last said something."""
+        """How many messages bots have sent each other since a person last said something. Their answers
+        to that person don't count."""
         count = 0
         for m in reversed(self.cached_messages):
             if m.channel.id == channel.id:
                 if not m.author.bot:
                     break
-                count += 1
+                count += not answers_person(m)
         return count
 
     async def on_message_edit(self, before: discord.Message, after: discord.Message):

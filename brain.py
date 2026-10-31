@@ -121,7 +121,7 @@ class Character:
         self.waiting_messages = search.get("waiting_messages") or ["Wait, let me look that up..."]
         self.key = char_cfg["id"]
         self.name = char_cfg["name"]
-        full_name = char_cfg.get("full_name", self.name)
+        self.full_name = full_name = char_cfg.get("full_name", self.name)
         aliases = {self.name, full_name, " ".join(reversed(full_name.split()))}
         self.prefix_re = re.compile(
             r"^\W*(?:%s)\W*?[:：]\s*\**" % "|".join(map(re.escape, sorted(aliases, key=len, reverse=True))),

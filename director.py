@@ -18,6 +18,13 @@ log = logging.getLogger("director")
 BOT_QUIET_SECONDS = 1.0  # wait after a character's message before the next one reacts to it
 
 
+def answers_person(message: discord.Message) -> bool:
+    """A bot's reply quoting a person's message. These don't count toward max_bot_chain: only the
+    characters talking among themselves do."""
+    ref = message.reference.resolved if message.reference else None
+    return isinstance(ref, discord.Message) and not ref.author.bot
+
+
 def channel_label(channel) -> str:
     """Short name for logs and the status screen: #general, or "DM with Name"."""
     if isinstance(channel, discord.DMChannel):
@@ -37,7 +44,7 @@ class Director:
         self.pending_person: dict[int, discord.Message] = {}
         self.pending_bot: dict[int, discord.Message] = {}
         self.last_seen: dict[int, float] = {}
-        self.chain: dict[int, int] = {}                  # bot messages in a row since a person spoke
+        self.chain: dict[int, int] = {}                  # bot-to-bot messages since a person spoke
         self.last_person: dict[int, int] = {}            # id of the newest message from a person
         self.workers: dict[int, asyncio.Task] = {}
         self.state: dict[int, tuple[str, str, float]] = {}  # channel id -> (name, what's going on, since)
@@ -51,7 +58,8 @@ class Director:
         self.seen.append(message.id)
         channel_id = message.channel.id
         if message.author.bot:
-            self.chain[channel_id] = self.chain.get(channel_id, 0) + 1
+            if not answers_person(message):
+                self.chain[channel_id] = self.chain.get(channel_id, 0) + 1
             self.pending_bot[channel_id] = message
         else:
             self.chain[channel_id] = 0
