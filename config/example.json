@@ -26,7 +26,7 @@
     "reply_to_dms": true,
     "reply_to_bots": false,
     "reply_to_characters": true,
-    "max_bot_chain": 3,
+    "max_bot_chain": 10,
     "random_reply_chance": 0.0,
     "mention_author": false,
     "always_reply": true,
