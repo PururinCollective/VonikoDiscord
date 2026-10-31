@@ -112,7 +112,8 @@ class Character:
                  others: list[dict] | None = None):
         """`others` are the other characters' config["character"] blocks, so she knows who else is here."""
         mem = cfg["memory"]
-        self.others_section = others_section(others or [])
+        self.others = others or []
+        self.others_section = others_section(self.others)
         search = cfg.get("web_search", {})
         self.search = websearch.WebSearch(search) if search.get("enabled") else None
         self.max_searches = search.get("max_searches", 1)

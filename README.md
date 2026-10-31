@@ -104,7 +104,16 @@ Each character replies:
 
 - when someone @mentions her, replies to one of her messages, or DMs her;
 - when someone calls her by one of her `name_triggers` (e.g. `sakurako`, `櫻子`, `rin`, `しまりん`);
+- when someone carries on talking with her (see below);
 - to every message in her `free_talk_channel_ids`, and to a `random_reply_chance` share of other messages.
+
+**Carrying on a conversation.** Once she has answered you, you don't have to say her name or press Reply for your next messages. She answers them if all of these are true:
+
+- she was the last character to answer you in that channel, less than `follow_up_minutes` ago (default 5);
+- nobody else has said anything since (other characters don't count);
+- your new message doesn't call another character by name, @mention anyone, or reply to someone else's message.
+
+So "rin, how's school?" → Rin answers → "oh really? let me check" goes to Rin. If someone else joins in, or you turn to Naruto ("naruto, what about you?"), call her by name again to get her back. Set `follow_up_minutes` to `0` to turn this off. A character only knows what happened since she started, so after a restart, call her by name first.
 
 **What counts as calling her by name.** Her name has to be one of the first 3 words of a sentence or its last word:
 
@@ -207,6 +216,7 @@ Paths in it (`persona_file`, `db_path`) are relative to the project folder. Olde
 | `discord.guild_ids` | Only work in these server IDs. Empty = any server she's in |
 | `discord.channel_ids` | Only read/reply in these channels (threads inside them included). Empty = every channel she can see |
 | `discord.free_talk_channel_ids` | Channels where she joins every conversation without being called |
+| `discord.follow_up_minutes` | How long after she answers someone their next message still goes to her without her name (default `5`, `0` = off). See **Carrying on a conversation** |
 | `discord.reply_to_dms` | Answer DMs |
 | `discord.reply_to_characters` | Answer another bot (e.g. another character) when it calls her by name, @mentions her or replies to her |
 | `discord.reply_to_bots` | Answer any bot the way she answers people (name, free-talk channels, random chance) |

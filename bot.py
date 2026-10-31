@@ -243,6 +243,7 @@ class CharacterBot(discord.Client):
         self.channel_ids = set(dcfg.get("channel_ids") or [])
         self.free_talk_ids = set(dcfg.get("free_talk_channel_ids") or [])
         self.triggers = NameTrigger(dcfg.get("name_triggers") or [])
+        self.others_triggers = NameTrigger([t for o in character.others for t in o.get("name_triggers") or []])
         self.debounce = dcfg.get("debounce_seconds", 2.5)
         self.pending: dict[int, discord.Message] = {}      # channel id -> newest message to answer
         self.last_trigger: dict[int, float] = {}
@@ -303,8 +304,32 @@ class CharacterBot(discord.Client):
             return True
         return self.triggers.called(message.content)
 
+    def following_up(self, message: discord.Message) -> bool:
+        """True when a person carries on talking with her without calling her again: she was the last
+        character to answer them, a moment ago, nobody else has spoken since, and they aren't calling, tagging
+        or replying to anyone else now."""
+        window = timedelta(minutes=self.cfg.get("follow_up_minutes", 5))
+        if (not window or message.author.bot or message.mentions or message.role_mentions
+                or message.type == discord.MessageType.reply or self.others_triggers.called(message.content)):
+            return False
+        earlier = [m for m in self.cached_messages if m.channel.id == message.channel.id and m.id < message.id]
+        for i in range(len(earlier) - 1, -1, -1):
+            m = earlier[i]
+            if message.created_at - m.created_at > window:
+                return False
+            if not m.author.bot:
+                if m.author.id != message.author.id:
+                    return False  # someone else spoke in between: they may be talking to each other
+                continue
+            ref = m.reference.resolved if m.reference else None
+            if not isinstance(ref, discord.Message):  # answered without quoting: the person who spoke last
+                ref = next((p for p in reversed(earlier[:i]) if not p.author.bot), None)
+            if ref and ref.author.id == message.author.id:  # the latest character to answer them
+                return m.author.id == self.user.id
+        return False
+
     def should_reply(self, message: discord.Message) -> bool:
-        if self.addressed(message):
+        if self.addressed(message) or self.following_up(message):
             return True
         channel = message.channel
         if {channel.id, getattr(channel, "parent_id", None)} & self.free_talk_ids:
@@ -665,7 +690,9 @@ def load_character(config_path: Path) -> tuple[dict, Character, ContextDB, Path]
     for name in available_characters(config_path.parent):
         path = config_path.parent / f"{name}.json"
         try:
-            other = load_config(path)["character"] if path.resolve() != config_path else None
+            other_cfg = load_config(path) if path.resolve() != config_path else None
+            other = other_cfg and {**other_cfg["character"],  # to tell when a message calls her instead
+                                   "name_triggers": other_cfg.get("discord", {}).get("name_triggers", [])}
         except (OSError, ValueError, KeyError):
             other = None
         if other and other.get("id") != char_cfg["id"]:

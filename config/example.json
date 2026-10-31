@@ -22,6 +22,7 @@
     "guild_ids": [],
     "channel_ids": [],
     "free_talk_channel_ids": [],
+    "follow_up_minutes": 5,
     "reply_to_dms": true,
     "reply_to_bots": false,
     "reply_to_characters": true,
