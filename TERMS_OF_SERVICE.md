@@ -1,19 +1,21 @@
 # Terms of Service: Pururin Collective character bots
 
-**Effective date:** 30 October 2026
+**Effective date:** 31 October 2026
 
-These terms cover your use of the AI character bots run for the Pururin Collective Discord server. Currently these are "Oomuro Sakurako", "Shima Rin", "Ijichi Nijika", "Raymond Reddington" and "Naruto Uzumaki" (each a "Bot", together the "Bots"). The Bots are run by the owner of the Pururin Collective Discord server (the "Operator"). If you talk to a Bot, or use a server or DM where one is present, you agree to these terms. If you don't agree, don't interact with the Bots.
+These terms cover your use of the AI character bots run for the Pururin Collective Discord server. Currently these are "Oomuro Sakurako", "Shima Rin", "Ijichi Nijika", "Gotoh Hitori", "Hitori Bocchi", "Raymond Reddington", "Naruto Uzumaki" and "GLaDOS" (each a "Bot", together the "Bots"). The Bots are run by the owner of the Pururin Collective Discord server (the "Operator"). If you talk to a Bot, or use a server or DM where one is present, you agree to these terms. If you don't agree, don't interact with the Bots.
 
 ## 1. What the Bots are
 
 - The Bots are fan-made AI chat characters:
   - Oomuro Sakurako from *Yuru Yuri*;
   - Shima Rin from *Yuru Camp△* (*Laid-Back Camp*);
-  - Ijichi Nijika from *Bocchi the Rock!*;
+  - Ijichi Nijika and Gotoh Hitori from *Bocchi the Rock!*;
+  - Hitori Bocchi from *Hitoribocchi no ○○ Seikatsu*;
   - Raymond "Red" Reddington from *The Blacklist*;
-  - Naruto Uzumaki from *Naruto* and *Boruto: Naruto Next Generations*.
+  - Naruto Uzumaki from *Naruto* and *Boruto: Naruto Next Generations*;
+  - GLaDOS from *Portal* and *Portal 2*.
 - Their replies come from an AI language model that runs on the Operator's own hardware.
-- They are a hobby project. They are not affiliated with or endorsed by Namori, Ichijinsha, Afro, Aki Hamaji, Houbunsha, Jon Bokenkamp, Sony Pictures Television, Universal Television, NBC, Masashi Kishimoto, Ukyō Kodachi, Mikio Ikemoto, Shueisha, the producers of the anime and TV series, or anyone else who owns these series. Those rights holders own the characters and all related trademarks.
+- They are a hobby project. They are not affiliated with or endorsed by Namori, Ichijinsha, Afro, Aki Hamaji, Houbunsha, Katsuwo, KADOKAWA, Jon Bokenkamp, Sony Pictures Television, Universal Television, NBC, Masashi Kishimoto, Ukyō Kodachi, Mikio Ikemoto, Shueisha, Valve, the producers of the anime, TV series and games, or anyone else who owns these series. Those rights holders own the characters and all related trademarks.
 - They are not affiliated with or endorsed by Discord Inc.
 
 ## 2. AI-generated content

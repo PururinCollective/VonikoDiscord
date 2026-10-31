@@ -7,8 +7,11 @@ AI characters from anime and TV that chat in the Pururin Collective Discord serv
 | Oomuro Sakurako (大室櫻子) | *Yuru Yuri* | [persona/sakurako.md](persona/sakurako.md) | `config/sakurako.json` | `context/sakurako.db` |
 | Shima Rin (志摩リン) | *Yuru Camp△* | [persona/rin.md](persona/rin.md) | `config/rin.json` | `context/rin.db` |
 | Ijichi Nijika (伊地知虹夏) | *Bocchi the Rock!* | [persona/nijika.md](persona/nijika.md) | `config/nijika.json` | `context/nijika.db` |
+| Gotoh Hitori (後藤ひとり) | *Bocchi the Rock!* | [persona/gotoh.md](persona/gotoh.md) | `config/gotoh.json` | `context/gotoh.db` |
+| Hitori Bocchi (一里ぼっち) | *Hitoribocchi no ○○ Seikatsu* | [persona/bocchi.md](persona/bocchi.md) | `config/bocchi.json` | `context/bocchi.db` |
 | Raymond "Red" Reddington | *The Blacklist* | [persona/raymond.md](persona/raymond.md) | `config/raymond.json` | `context/raymond.db` |
 | Naruto Uzumaki (うずまきナルト) | *Naruto* / *Boruto* | [persona/naruto.md](persona/naruto.md) | `config/naruto.json` | `context/naruto.db` |
+| GLaDOS | *Portal* | [persona/glados.md](persona/glados.md) | `config/glados.json` | `context/glados.db` |
 
 - Each character is a separate Discord bot with its own name, avatar and token.
 - Each runs in its own process, with its own config file and its own memory database. After a restart, each picks up where it left off.
@@ -121,6 +124,7 @@ So "rin, how's school?" → Rin answers → "oh really? let me check" goes to Ri
 - **Doesn't count:** just mentioning her ("nijika, can you ask sakurako about rin camping?" calls only Nijika).
 - **Honorifics:** like `-chan`, `-sama`, `-niichan`, `-ojisan`, ちゃん, 様 and 兄ちゃん are fine.
 - **Similar words:** "Rin's", "string" or "プリン" never call Rin.
+- **The two Bocchis:** "Bocchi" (ぼっち, 一里) calls Hitori Bocchi. Bocchi the Rock!'s Gotoh Hitori answers to "Gotoh" (後藤, ごとう) or "guitarhero". Nijika knows to call her bandmate "Gotoh-chan" here.
 
 Call several at once ("Sakurako and Nijika, come here!") and they'll all answer.
 
@@ -267,7 +271,7 @@ Get channel and server IDs by turning on **Developer Mode** (Discord Settings �
 
 - **Code and everything else** (`*.py`, `run.bat`, `config/example.json`, `persona/example.md`, the docs): [MIT](LICENSE).
 - **Character sheets** (the other `persona/*.md`): [CC BY-SA 4.0](persona/LICENSE.md), because they're based on Fandom wiki articles under CC BY-SA. That file credits the wiki pages.
-- **The characters** (Oomuro Sakurako, Shima Rin, Ijichi Nijika, Raymond Reddington, Naruto Uzumaki), their names and their series belong to their creators and publishers, and neither license covers them. This is an unofficial fan project, not affiliated with or endorsed by them.
+- **The characters** (Oomuro Sakurako, Shima Rin, Ijichi Nijika, Gotoh Hitori, Hitori Bocchi, Raymond Reddington, Naruto Uzumaki, GLaDOS), their names and their series belong to their creators and publishers, and neither license covers them. This is an unofficial fan project, not affiliated with or endorsed by them.
 - **Never publish** `dump/` (saved wiki pages, including Fandom's site code and images), `config/*.json` (bot tokens) or `context/` (members' messages). All three are in `.gitignore`.
 - `profile/` (the wiki text from `wiki2md.py`, copied word for word) is in `.gitignore` too, so it stays out of the MIT-licensed repo.
 

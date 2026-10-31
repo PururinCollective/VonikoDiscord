@@ -13,6 +13,7 @@ import argparse
 import re
 import sys
 import unicodedata
+from collections import Counter
 from pathlib import Path
 
 import lxml.html
@@ -311,10 +312,13 @@ def convert(path: Path) -> tuple[str, str]:
     return title, re.sub(r"\n{3,}", "\n\n", text).strip() + "\n"
 
 
-def slug(title: str) -> str:
-    first = title.split()[0] if title.split() else "page"
-    ascii_name = unicodedata.normalize("NFKD", first).encode("ascii", "ignore").decode()
+def slug(text: str) -> str:
+    ascii_name = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
     return re.sub(r"[^a-z0-9]+", "-", ascii_name.lower()).strip("-") or "page"
+
+
+def first_name(title: str) -> str:
+    return slug(title.split()[0] if title.split() else "page")
 
 
 def main() -> int:
@@ -333,7 +337,7 @@ def main() -> int:
     args.out.mkdir(parents=True, exist_ok=True)
     failed = 0
     # Pages about the same character (one per wiki) go into one file.
-    profiles: dict[Path, list[tuple[Path, str]]] = {}
+    by_title: dict[str, list[tuple[Path, str]]] = {}
     for page in pages:
         try:
             title, text = convert(page)
@@ -341,8 +345,11 @@ def main() -> int:
             print(f"{page.name}: {e}", file=sys.stderr)
             failed += 1
             continue
-        profiles.setdefault(args.out / f"{slug(title)}.md", []).append((page, text))
-    for target, parts in profiles.items():
+        by_title.setdefault(title, []).append((page, text))
+    # named after her first name, or her whole name if another character shares it ("Hitori Bocchi", "Hitori Gotoh")
+    firsts = Counter(first_name(title) for title in by_title)
+    for title, parts in by_title.items():
+        target = args.out / f"{first_name(title) if firsts[first_name(title)] == 1 else slug(title)}.md"
         text = "\n---\n\n".join(text for _, text in parts)
         target.write_text(text, encoding="utf-8", newline="\n")
         size = sum(page.stat().st_size for page, _ in parts) // 1024
