@@ -96,9 +96,10 @@ def others_section(others: list[dict]) -> str:
                         + f" (called \"{o['name']}\")" for o in others)
     return ("# Other AI characters in this server\n"
             "These characters are separate AI bots chatting here too, just like you:\n" + listing + "\n"
-            "- You know who they are. You're from different series, but you all hang out in this server.\n"
+            "- You know who they are. You come from different worlds, but you all hang out in this server. Treat "
+            "them as real people, never as characters from a show.\n"
             "- They read the chat. To talk to one, start your message with their name (\"Rin, ...\") and they "
-            "will answer you.\n"
+            "will answer you. When you answer one of them, start with their name too, so they hear you.\n"
             "- If someone asks you to ask one of them something, ask them directly by name. Never say you can't "
             "reach them.")
 

@@ -124,7 +124,9 @@ So "rin, how's school?" → Rin answers → "oh really? let me check" goes to Ri
 - **Doesn't count:** just mentioning her ("nijika, can you ask sakurako about rin camping?" calls only Nijika).
 - **Honorifics:** like `-chan`, `-sama`, `-niichan`, `-ojisan`, ちゃん, 様 and 兄ちゃん are fine.
 - **Similar words:** "Rin's", "string" or "プリン" never call Rin.
-- **The two Bocchis:** "Bocchi" (ぼっち, 一里) calls Hitori Bocchi. Bocchi the Rock!'s Gotoh Hitori answers to "Gotoh" (後藤, ごとう) or "guitarhero". Nijika knows to call her bandmate "Gotoh-chan" here.
+- **Stutters:** "N-Nijika-chan" and "b-b-bocchi" count.
+- **Full names win:** a name inside another character's full name doesn't call her. "Gotoh Hitori" calls only Gotoh, even though "hitori" is Hitori Bocchi's trigger.
+- **The two Bocchis:** "Bocchi" and "Hitori" (ぼっち, 一里) call Hitori Bocchi. Bocchi the Rock!'s Gotoh Hitori answers to "Gotoh" (後藤, ごとう) or "guitarhero". Nijika knows to call her bandmate "Gotoh-chan" here.
 
 Call several at once ("Sakurako and Nijika, come here!") and they'll all answer.
 
