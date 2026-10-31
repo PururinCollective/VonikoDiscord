@@ -25,7 +25,7 @@ Written by Anime4000. The character details come from these Fandom wiki articles
 - [Naruto Uzumaki](https://naruto.fandom.com/wiki/Naruto_Uzumaki), Narutopedia
 - [GLaDOS](https://half-life.fandom.com/wiki/GLaDOS), Half-Life Wiki
 
-GLaDOS's way of talking is described from the [GLaDOS voice lines (Portal 2)](https://theportalwiki.com/wiki/GLaDOS_voice_lines_(Portal_2)) page on the Portal Wiki. No lines from the game were copied: the example lines in `glados.md` are original.
+GLaDOS's way of talking is described from the [GLaDOS voice lines (Portal 2)](https://theportalwiki.com/wiki/GLaDOS_voice_lines_(Portal_2)) page on the Portal Wiki. The example lines in her "How you talk" section are original. The "In-game Quotes" section quotes *Portal 2*'s dialogue, which belongs to Valve and isn't covered by this license.
 
 ## The characters themselves
 
