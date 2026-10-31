@@ -1,5 +1,5 @@
 """Anime character bots for Discord (Oomuro Sakurako, Shima Rin, ...), powered by a local LM Studio model.
-Each character has her own config/<char>.json and memory in context/context.<char>.db.
+Each character has her own config/<char>.json and memory in context/<char>.db.
 
     python bot.py --char sakurako            run Sakurako on Discord
     python bot.py --char all                 run every character together, taking turns (see director.py)
@@ -20,6 +20,7 @@ import re
 import sys
 import time
 from datetime import datetime, timedelta, timezone
+from functools import partial
 from pathlib import Path
 
 import discord
@@ -39,6 +40,7 @@ CONFIG_FOLDER = "config"
 DB_FOLDER = "context"
 MAX_IMAGES = 4                     # per message
 MAX_IMAGE_BYTES = 25 * 1024 * 1024
+SAME_POST_SECONDS = 120            # a picture or forward this soon before someone's message goes with it
 IMAGE_MAX_SIDE = 1024              # px; bigger images are shrunk before they're sent to the model
 REPLY_QUOTE_CHARS = 300            # how much of a replied-to message is quoted
 LEGACY_DB = ("context.db", "sakurako")  # memory file of the Sakurako-only version, and who it belongs to
@@ -133,12 +135,20 @@ def move_old_configs(base_dir: Path):
 
 
 def open_all_databases(own_path: Path, own_db: ContextDB) -> list[ContextDB]:
-    """This character's database plus every other character's context.<char>.db in the same folder."""
+    """This character's database plus every other character's <char>.db in the same folder."""
     dbs = [own_db]
-    for path in sorted(own_path.parent.glob("context.*.db")):
-        if path.resolve() != own_path.resolve():
-            dbs.append(ContextDB(str(path), owner=path.name[len("context."):-len(".db")]))
+    for path in sorted(own_path.parent.glob("*.db")):
+        if path.resolve() != own_path.resolve():  # a context.<char>.db not moved yet still belongs to <char>
+            dbs.append(ContextDB(str(path), owner=path.stem.removeprefix("context.")))
     return dbs
+
+
+def embed_image_url(embed: discord.Embed) -> str | None:
+    """Discord's copy of the picture in an embed: a posted image link, or the big image of a link preview
+    (e.g. a tweet). Small article thumbnails are left out."""
+    if embed.type in ("image", "gifv"):
+        return embed.thumbnail.proxy_url
+    return embed.image.proxy_url
 
 
 def image_to_data_url(data: bytes) -> str | None:
@@ -301,13 +311,16 @@ class CharacterBot(discord.Client):
             return True
         return random.random() < self.cfg.get("random_reply_chance", 0.0)
 
-    # --- storing messages in context.db ---------------------------------------------------------
+    # --- storing messages in context/<char>.db -----------------------------------------------------
 
     @staticmethod
     def plain_text(message: discord.Message) -> str:
         text = message.clean_content
         text += "".join(f" [attachment: {a.filename}]" for a in message.attachments)
         text += "".join(f" [sticker: {s.name}]" for s in message.stickers)
+        for snap in message.message_snapshots:  # a forwarded message: its text and files are in here
+            forwarded = [snap.content, *(f"[attachment: {a.filename}]" for a in snap.attachments)]
+            text += f" [forwarded message: {' '.join(filter(None, forwarded)) or '(no text)'}]"
         return text.strip()
 
     def to_text(self, message: discord.Message) -> str:
@@ -512,23 +525,41 @@ class CharacterBot(discord.Client):
             except Exception:
                 self.log.exception("Failed to reply in channel %s", channel_id)
 
+    def posted_just_before(self, message: discord.Message) -> discord.Message | None:
+        """The previous message in the channel, if the same person sent it moments earlier: Discord sends a
+        forward's comment as a message of its own, and people often post a picture, then ask about it."""
+        before = next((m for m in reversed(self.cached_messages)
+                       if m.channel.id == message.channel.id and m.id < message.id), None)
+        if before and before.author.id == message.author.id \
+                and message.created_at - before.created_at <= timedelta(seconds=SAME_POST_SECONDS):
+            return before
+        return None
+
     async def collect_images(self, message: discord.Message) -> list[str]:
-        """Images attached to the message and to the message it replies to (so "nijika, what's wrong here?"
-        as a reply to someone's screenshot works), ready for the model. None if the model is text-only."""
+        """Images in the message, in the message it replies to (so "nijika, what's wrong here?" as a reply to
+        someone's screenshot works) and in the one its author posted just before, including forwarded messages
+        and link previews, ready for the model. None if the model is text-only."""
         if not self.vision or not await self.character.llm.supports_images():
             return []
-        attachments = list(message.attachments)
-        if ref := await self.replied_to(message):
-            attachments += ref.attachments
+        sources = {m.id: m for m in (message, await self.replied_to(message), self.posted_just_before(message)) if m}
+        parts = [p for m in sources.values() for p in (m, *m.message_snapshots)]
+        attachments = {a.id: a for p in parts for a in p.attachments
+                       if (a.content_type or "").startswith("image/") and a.size <= MAX_IMAGE_BYTES}
+        embed_urls = dict.fromkeys(url for p in parts for e in p.embeds if (url := embed_image_url(e)))
         images = []
-        for a in attachments:
+        for name, read in [*((a.filename, a.read) for a in attachments.values()),
+                           *((url, partial(self.http.get_from_cdn, url)) for url in embed_urls)]:
             if len(images) >= MAX_IMAGES:
                 break
-            if (a.content_type or "").startswith("image/") and a.size <= MAX_IMAGE_BYTES:
-                if url := await asyncio.to_thread(image_to_data_url, await a.read()):
-                    images.append(url)
-                else:
-                    self.log.warning("Couldn't read image %s", a.filename)
+            try:
+                data = await read()
+            except discord.HTTPException:
+                self.log.warning("Couldn't download image %s", name)
+                continue
+            if url := await asyncio.to_thread(image_to_data_url, data):
+                images.append(url)
+            else:
+                self.log.warning("Couldn't read image %s", name)
         return images
 
     async def respond(self, message: discord.Message):
@@ -600,11 +631,12 @@ async def run_cli(character: Character, db: ContextDB, user: str, say: str | Non
 
 
 def move_old_db(base_dir: Path, db_path: Path, char_id: str):
-    """Earlier versions kept memory next to the config: context.db (Sakurako only), then context.<char>.db.
-    Move it into the context folder the first time she starts."""
+    """Earlier versions kept memory next to bot.py, as context.db (Sakurako only) and then context.<char>.db,
+    and later in the context folder as context.<char>.db. Move it to db_path the first time she starts."""
     if db_path.exists():
         return
-    old_names = [f"context.{char_id}.db"] + ([LEGACY_DB[0]] if char_id == LEGACY_DB[1] else [])
+    old_names = ([f"{DB_FOLDER}/context.{char_id}.db", f"context.{char_id}.db"]
+                 + ([LEGACY_DB[0]] if char_id == LEGACY_DB[1] else []))
     old = next((base_dir / n for n in old_names if (base_dir / n).exists()), None)
     if old is None:
         return
@@ -617,7 +649,7 @@ def move_old_db(base_dir: Path, db_path: Path, char_id: str):
         journal = old.with_name(old.name + suffix)
         if journal.exists():
             journal.rename(db_path.with_name(db_path.name + suffix))
-    print(f"Moved {old.name} to {db_path.relative_to(base_dir)}")
+    print(f"Moved {old.relative_to(base_dir).as_posix()} to {db_path.relative_to(base_dir).as_posix()}")
 
 
 def load_character(config_path: Path) -> tuple[dict, Character, ContextDB, Path]:
@@ -625,7 +657,7 @@ def load_character(config_path: Path) -> tuple[dict, Character, ContextDB, Path]
     cfg = load_config(config_path)
     base_dir = HERE
     char_cfg = cfg["character"]
-    db_path = base_dir / cfg["memory"].get("db_path", f"{DB_FOLDER}/context.{char_cfg['id']}.db")
+    db_path = base_dir / cfg["memory"].get("db_path", f"{DB_FOLDER}/{char_cfg['id']}.db")
     db_path.parent.mkdir(parents=True, exist_ok=True)
     move_old_db(base_dir, db_path, char_cfg["id"])
     db = ContextDB(str(db_path), owner=char_cfg["id"])

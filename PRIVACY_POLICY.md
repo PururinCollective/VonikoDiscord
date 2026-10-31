@@ -1,6 +1,6 @@
 # Privacy Policy: Pururin Collective character bots
 
-**Effective date:** 30 October 2026
+**Effective date:** 31 October 2026
 
 This policy explains what the AI character bots run for the Pururin Collective Discord server collect, why, and what you can do about it. Currently these are "Oomuro Sakurako", "Shima Rin", "Ijichi Nijika", "Raymond Reddington" and "Naruto Uzumaki" (each a "Bot", together the "Bots"). The Bots are run by the owner of the Pururin Collective Discord server (the "Operator").
 
@@ -17,8 +17,8 @@ For each message the Bots store:
 
 | Data | Example |
 |---|---|
-| Message text | Mentions are turned into display names. It also notes who the message replies to. |
-| Attachments and stickers | The file name or sticker name only, not the file itself |
+| Message text | Mentions are turned into display names. It also notes who the message replies to. A forwarded message's text is stored too. |
+| Attachments and stickers | The file name or sticker name only, not the file itself (also for forwarded messages) |
 | Your Discord user ID and current display name | `123456789012345678`, `Hikari` |
 | Message, channel and server IDs | Used to keep conversations apart and to handle edits and deletions |
 | When the message was sent | `2026-10-29T10:15:00Z` |
@@ -29,7 +29,7 @@ They also keep:
 - **Conversation summaries.** For each channel, the AI writes short notes that summarize older messages from the character's point of view. This is each Bot's long-term memory. The notes can include facts people mentioned about themselves, such as names, hobbies or allergies.
 - **Missed messages.** When a Bot starts up, it fetches up to 50 recent messages per channel that arrived while it was offline. This only covers channels that Bot has already saved messages from, and the messages are stored the same way.
 
-**Images.** When a Bot replies to a message that has images attached, those images are downloaded and shown to the AI model for that one reply. They are not saved.
+**Images.** When a Bot replies to a message, it downloads the images in it and shows them to the AI model for that one reply. This covers attached images, images in forwarded messages, and pictures in link previews. It also covers the message it replies to, and a message the same person posted up to 2 minutes before. Images are not saved.
 
 **Web searches.** When a question needs current information, a Bot can search the web.
 
@@ -51,7 +51,7 @@ It is not used for advertising or profiling, and it is not sold.
 ## 3. Where it goes
 
 - **Discord.** Messages travel through Discord as usual; see [Discord's Privacy Policy](https://discord.com/privacy).
-- **The Operator's computer.** Stored data lives in local SQLite databases, one per Bot, in a `context` folder (for example `context/context.sakurako.db`, `context/context.rin.db` and `context/context.nijika.db`). The databases are not encrypted. They are protected only by the security of the Operator's computer.
+- **The Operator's computer.** Stored data lives in local SQLite databases, one per Bot, in a `context` folder (for example `context/sakurako.db`, `context/rin.db` and `context/nijika.db`). The databases are not encrypted. They are protected only by the security of the Operator's computer.
 - **The AI model.** Message text and images are sent to an AI model (LM Studio) running on a computer on the Operator's private home network. No cloud AI service such as OpenAI, Anthropic or Google receives your messages.
 - **Search providers.** Search queries go to the web search provider described in section 1, under that provider's own privacy policy.
 - **Nobody else.** Data is not shared with other third parties, except where the law requires it.

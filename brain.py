@@ -164,13 +164,15 @@ class Character:
         rows = self.db.recent_messages(channel_id, upto, self.history_messages + self.summarize_batch)
 
         system = [self.persona,
-                  f"# Right now\n- You are chatting in {place}.\n"
-                  f"- Current date and time: {datetime.now().strftime('%A, %d %B %Y, %H:%M')}.",
+                  f"# Right now\n- You are chatting in {place}.",
                   "# Your memory of earlier conversation here\n" + (summary or "(nothing yet)"),
                   self.others_section,
                   RULES.format(name=self.name)]
         if self.search:
             system.append(SEARCH_RULES)
+        # last, so the model doesn't lose it among the persona's own dates (a birthday "October 1" read as today)
+        now = datetime.now()
+        system.append(f"# Today\nToday is {now:%A, %d %B %Y}, {now:%H:%M}.")
         if target_id and (target := self.db.get_message(target_id)):
             # always spelled out: the chat log merges messages, and she'd otherwise answer an older one
             system.append(f"# The message you are answering\n{target['author_name']}: \"{target['content'][:500]}\"\n"

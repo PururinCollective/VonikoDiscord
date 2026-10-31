@@ -1,4 +1,4 @@
-"""context.<character>.db: persistent chat memory so a character can pick up where she left off after a restart.
+"""context/<character>.db: persistent chat memory so a character can pick up where she left off after a restart.
 
 Each character has her own database: every message she sees, plus a rolling per-channel summary of older
 messages (her "long-term memory"), so the prompt stays small while nothing is forgotten.

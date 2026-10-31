@@ -4,11 +4,11 @@ AI characters from anime and TV that chat in the Pururin Collective Discord serv
 
 | Character | From | Persona | Config | Memory |
 |---|---|---|---|---|
-| Oomuro Sakurako (大室櫻子) | *Yuru Yuri* | [persona/sakurako.md](persona/sakurako.md) | `config/sakurako.json` | `context/context.sakurako.db` |
-| Shima Rin (志摩リン) | *Yuru Camp△* | [persona/rin.md](persona/rin.md) | `config/rin.json` | `context/context.rin.db` |
-| Ijichi Nijika (伊地知虹夏) | *Bocchi the Rock!* | [persona/nijika.md](persona/nijika.md) | `config/nijika.json` | `context/context.nijika.db` |
-| Raymond "Red" Reddington | *The Blacklist* | [persona/raymond.md](persona/raymond.md) | `config/raymond.json` | `context/context.raymond.db` |
-| Naruto Uzumaki (うずまきナルト) | *Naruto* / *Boruto* | [persona/naruto.md](persona/naruto.md) | `config/naruto.json` | `context/context.naruto.db` |
+| Oomuro Sakurako (大室櫻子) | *Yuru Yuri* | [persona/sakurako.md](persona/sakurako.md) | `config/sakurako.json` | `context/sakurako.db` |
+| Shima Rin (志摩リン) | *Yuru Camp△* | [persona/rin.md](persona/rin.md) | `config/rin.json` | `context/rin.db` |
+| Ijichi Nijika (伊地知虹夏) | *Bocchi the Rock!* | [persona/nijika.md](persona/nijika.md) | `config/nijika.json` | `context/nijika.db` |
+| Raymond "Red" Reddington | *The Blacklist* | [persona/raymond.md](persona/raymond.md) | `config/raymond.json` | `context/raymond.db` |
+| Naruto Uzumaki (うずまきナルト) | *Naruto* / *Boruto* | [persona/naruto.md](persona/naruto.md) | `config/naruto.json` | `context/naruto.db` |
 
 - Each character is a separate Discord bot with its own name, avatar and token.
 - Each runs in its own process, with its own config file and its own memory database. After a restart, each picks up where it left off.
@@ -45,7 +45,7 @@ Then:
 
 The first run creates `.venv`. Every start installs anything missing from `requirements.txt` (`discord.py`, `pillow`, `ddgs`, `rich`).
 
-`--char <name>` loads `config/<name>.json` and keeps memory in `context/context.<name>.db`. You can also give the file directly: `run.bat --config config/rin.json`.
+`--char <name>` loads `config/<name>.json` and keeps memory in `context/<name>.db`. You can also give the file directly: `run.bat --config config/rin.json`.
 
 `--char all` runs every `config/<name>.json` except `config/example.json`, so a new character is included automatically. Characters whose token isn't set yet are skipped with a warning. All of them share the one model loaded in LM Studio.
 
@@ -129,7 +129,9 @@ Each waits `debounce_seconds` for people to finish typing and then answers once.
 
 **Tagging people.** A character can tag someone by writing @ and their display name, e.g. "Nijika, call Ryukura over" → "@Ryukura hey! …". The bot turns that into a real Discord mention for anyone who has talked in that channel (and isn't forgotten with `/forgetme`). @everyone and @here are never pinged.
 
-**Images.** She looks at up to 4 images attached to the message she's answering (or to the message it replies to), when `llm.vision` is on and LM Studio's loaded model is a vision model (type `vlm` in LM Studio, e.g. `huihui-qwen3.8-27b-abliterated`).
+**Images.** She looks at up to 4 images when `llm.vision` is on and LM Studio's loaded model is a vision model (type `vlm` in LM Studio, e.g. `huihui-qwen3.8-27b-abliterated`). They come from the message she's answering, the message it replies to, and the message its author posted just before it (up to 2 minutes earlier). That last one covers forwards: Discord sends the comment you add to a forward as a separate message, and people often post a picture and then ask about it.
+
+- Attached images, images in forwarded messages, and the picture in a link preview (e.g. a tweet) all count. Forwarded messages are also stored as text, as `[forwarded message: ...]`.
 
 - Each image is converted to a JPEG of at most 1024 px first, because LM Studio rejects WebP and large photos are slow.
 - With a text-only model (e.g. `qwen3.8-27b-defiance-uncensored-mtp`), images are skipped. She only sees the file name.
@@ -156,7 +158,7 @@ The characters can look things up online: news, release dates, prices, weather, 
 
 ## Slash commands
 
-`/forgetme` lets any member delete their own stored data, for **every** character. It works with any of the bots, in servers and in DMs, and only the person who runs it sees the reply. It goes through every `context.*.db` in the `context` folder. It shows how many of their messages are stored and asks them to confirm. Confirming deletes:
+`/forgetme` lets any member delete their own stored data, for **every** character. It works with any of the bots, in servers and in DMs, and only the person who runs it sees the reply. It goes through every `.db` file in the `context` folder. It shows how many of their messages are stored and asks them to confirm. Confirming deletes:
 
 - their messages;
 - their DM history with every character;
@@ -167,7 +169,7 @@ The [privacy policy](PRIVACY_POLICY.md) lists exactly what it does and doesn't r
 
 The command is registered every time a bot starts. If a new command doesn't appear in Discord, restart Discord (Ctrl+R).
 
-## Memory (`context/context.<char>.db`)
+## Memory (`context/<char>.db`)
 
 - **Message log.** Every message in the channels a character watches is saved in her database. Edits update the saved copy, and deleted messages are removed.
 - **Long-term memory.** The last `history_messages` messages per channel go into the prompt word for word. Older ones are folded into a per-channel summary written from her point of view.
@@ -178,8 +180,8 @@ The command is registered every time a bot starts. If a new command doesn't appe
 
   The notes are written in batches small enough for the model's context too. Compactions show in the log and on the status screen.
 - **Catch-up after a restart.** On startup she fetches up to `catch_up_limit` messages she missed while offline. If the newest one was addressed to her and is less than `catch_up_reply_max_age_minutes` old, she answers it.
-- **Older memory files.** Earlier versions kept memory next to `bot.py`: `context.db` (Sakurako only), then `context.<char>.db`. The next time a character starts, her file is moved into `context/` (and upgraded if needed). Stop the running copy of her first.
-- **To wipe a character's memory**, stop her and delete `context/context.<char>.db`.
+- **Older memory files.** Earlier versions kept memory next to `bot.py` as `context.db` (Sakurako only), then `context.<char>.db`, and later in `context/` as `context.<char>.db`. The next time a character starts, her file is moved to `context/<char>.db` (and upgraded if needed). Stop the running copy of her first.
+- **To wipe a character's memory**, stop her and delete `context/<char>.db`.
 
 ## Talk to them in the terminal
 
@@ -195,7 +197,7 @@ Paths in it (`persona_file`, `db_path`) are relative to the project folder. Olde
 
 | Key | Meaning |
 |---|---|
-| `character.id` | Short id, also used for her `context/context.<id>.db`. Don't change it once she has memories |
+| `character.id` | Short id, also used for her `context/<id>.db`. Don't change it once she has memories |
 | `character.name`, `full_name` | Name used in prompts, and for removing a "Name:" prefix the model sometimes copies into replies |
 | `character.series` | Her series, shown to the other characters so they know who she is |
 | `character.persona_file` | Her character sheet |
@@ -232,7 +234,7 @@ Paths in it (`persona_file`, `db_path`) are relative to the project folder. Olde
 | `memory.summarize_batch` | How many extra messages pile up before older ones are summarized |
 | `memory.compact_at` | Compact her memory of a channel once a prompt there uses this share of the context (default `0.75`) |
 | `memory.keep_after_compact` | Messages kept word for word after compacting (default `10`) |
-| `memory.db_path` | Optional. Defaults to `context/context.<id>.db`. Keep every character's database in the same folder and named `context.*.db`, so `/forgetme` finds them all |
+| `memory.db_path` | Optional. Defaults to `context/<id>.db`. Keep every character's database in the same folder, so `/forgetme` finds them all |
 | `cli.user_name` | Your name in terminal mode (defaults to your Windows user name) |
 
 Get channel and server IDs by turning on **Developer Mode** (Discord Settings → Advanced), then right-clicking a channel or server → **Copy ID**.
@@ -269,7 +271,7 @@ When you add a character, add the wiki source and copyright line to [persona/LIC
 - `websearch.py`: the web search tool (DuckDuckGo / SearXNG / Brave, plus reading result pages)
 - `director.py`: turn-taking when all characters run together (`--char all`)
 - `tui.py`: the status screen
-- `memory.py`: the `context/context.<char>.db` memory databases (SQLite)
+- `memory.py`: the `context/<char>.db` memory databases (SQLite)
 - `persona/*.md`: character sheets
 - `persona/example.md`: template for a new character sheet
 - `wiki2md.py`: turns saved wiki pages (`dump/*.html`) into short Markdown (`profile/*.md`)
