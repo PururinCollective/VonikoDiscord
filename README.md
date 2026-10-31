@@ -142,6 +142,17 @@ Call several at once ("Sakurako and Nijika, come here!") and they'll all answer.
 
 Each waits `debounce_seconds` for people to finish typing and then answers once. She answers a person with Discord's reply feature, so they're tagged (`always_reply`, with `mention_author` for the ping). In DMs, and when answering another character, she only does that if other messages arrived in the meantime.
 
+**Formatting.** Characters can use Discord markdown when it fits: **bold** and *italic* for stress, ~~strikethrough~~, `||spoilers||`, `inline code` and code blocks with a language (```` ```python ````). They're told not to format every message. Code can run past the usual 1-3 sentences. A reply over Discord's 2000-character limit is sent in parts. A code block cut in two is closed at the end of one part and reopened, with its language, at the start of the next, so both parts still show as code.
+
+**Actions.** Now and then a character does something as well as saying it. The action goes on its own first line as a Discord quote, never in `*asterisks*`:
+
+```
+> points at the guitar
+hitori, your guitar needs tuning
+```
+
+Names in a quote line never call anyone, whether it's a character's action ("> hides behind Nijika") or a person quoting someone else's words. The line after it still does: the example above calls Hitori Bocchi.
+
 **Tagging people.** A character can tag someone by writing @ and their display name, e.g. "Nijika, call Ryukura over" → "@Ryukura hey! …". The bot turns that into a real Discord mention for anyone who has talked in that channel (and isn't forgotten with `/forgetme`). @everyone and @here are never pinged.
 
 **Images.** She looks at up to 4 images when `llm.vision` is on and LM Studio's loaded model is a vision model (type `vlm` in LM Studio, e.g. `huihui-qwen3.8-27b-abliterated`). They come from the message she's answering, the message it replies to, and the message its author posted just before it (up to 2 minutes earlier). That last one covers forwards: Discord sends the comment you add to a forward as a separate message, and people often post a picture and then ask about it.

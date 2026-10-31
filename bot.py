@@ -68,6 +68,8 @@ SENTENCE_END = re.compile(r"[.!?。！？\n]+")
 STUTTER = re.compile(r"^(?:(\w)-(?=\1))+")  # "n-nijika", "b-b-bocchi"
 BREAKS, BREAK = ",，、;；:：", ","            # inside a sentence: names never run across these
 LIST_JOINERS = {BREAK, "and", "&", "or", "dan", "atau"}  # "Rin, Nijika and Naruto", "Rin dan Nijika"
+# Discord quotes: a character's action ("> waves at Nijika") or someone else's words. Neither calls anyone.
+QUOTED = re.compile(r"^ *>>> [\s\S]*|^ *> .*$", re.MULTILINE)
 # "Rin-chan", "Naruto-niichan", "Red-ojisan", "Naruto-nii-chan"
 HONORIFIC = re.compile(r"(-(o?nii|o?nee|o?ji|o?ba|aniki|aneki)?(chan|san|sama|senpai|sensei|kun|tan|dono)?)+$")
 JP_HONORIFICS = ("ちゃん", "さん", "様", "さま", "先輩", "せんぱい", "くん", "君", "殿", "兄ちゃん", "兄さん", "にいちゃん",
@@ -93,7 +95,7 @@ class NameTrigger:
     def called(self, text: str, others: "NameTrigger | None" = None) -> bool:
         """`others` are the other characters' names. Her name doesn't count inside a longer one of theirs:
         with "hitori" as her trigger, "Gotoh Hitori" still calls only Gotoh."""
-        for sentence in SENTENCE_END.split(text):
+        for sentence in SENTENCE_END.split(QUOTED.sub("", text)):
             # a comma stays in as a marker, so "hitori, gotoh ..." is never read as the name "Hitori Gotoh"
             words = [BREAK if t in BREAKS else HONORIFIC.sub("", STUTTER.sub("", t.strip("'’-")))
                      for t in re.findall(rf"[\w'’-]+|[{BREAKS}&]", sentence.lower())]
@@ -136,6 +138,7 @@ class NameTrigger:
 
     def position(self, text: str) -> int:
         """Where her name first appears in the text (a large number if it doesn't), for speaking order."""
+        text = QUOTED.sub(lambda m: " " * len(m.group()), text)  # blanked, so positions stay comparable
         lowered = text.lower()
         spots = [m.start() for name in self.latin
                  if (m := re.search(r"\b" + r"[\s-]+".join(map(re.escape, name)), lowered))]
@@ -213,17 +216,26 @@ def shorten(text: str, limit: int = REPLY_QUOTE_CHARS) -> str:
 
 
 def split_message(text: str, limit: int = 2000) -> list[str]:
-    chunks = []
-    while len(text) > limit:
-        cut = text.rfind("\n", 0, limit)
-        if cut < limit // 2:
-            cut = text.rfind(" ", 0, limit)
-        if cut < limit // 2:
-            cut = limit
-        chunks.append(text[:cut].rstrip())
-        text = text[cut:].lstrip()
-    if text:
-        chunks.append(text)
+    """Discord takes 2000 characters per message. A code block cut in two is closed at the end of one part and
+    opened again (same language) at the start of the next, so both still show as code."""
+    chunks, fence = [], ""  # fence: the ``` line of a code block left open by the previous part
+    while len(fence) + len(text) > limit:
+        room = limit - len(fence) - 4  # room for "\n```" if the part ends inside a code block
+        cut = text.rfind("\n", 0, room)
+        if cut < room // 2:
+            cut = text.rfind(" ", 0, room)
+        if cut < room // 2:
+            cut = room
+        # keep the next part's indentation: it may be code
+        part, text = fence + text[:cut].rstrip(), text[cut:].lstrip(" ").lstrip("\n")
+        fence = ""
+        for line in part.splitlines():
+            if line.count("```") % 2:  # "```python" opens or "```" closes; "```x = 1```" does neither
+                lang = line.rsplit("```", 1)[1].strip()
+                fence = "" if fence else "```" + (lang if re.fullmatch(r"[\w+#.-]{1,20}", lang) else "") + "\n"
+        chunks.append(part + "\n```" if fence else part)
+    if text.strip():
+        chunks.append(fence + text)
     return chunks
 
 
