@@ -226,8 +226,9 @@ class StatusScreen:
                 text.append(f" · {llm.info.id}")
                 text.append(" · vision" if llm.info.vision else " · text only", "grey62")
                 text.append(f" · context {limit:,}" if limit else " · context size unknown", "grey62")
-            effort = llm.params.get("reasoning_effort")
-            text.append(" · thinking off" if effort == "none" else f" · thinking {effort or 'on'}", "grey62")
+            # "none" is no thinking at all; unset leaves it to the model
+            efforts = dict.fromkeys(c.params.get("reasoning_effort") or "model default" for c in llms)
+            text.append(f" · Effort: {', '.join(efforts)}", "grey62")
             latest = max((bot.character.stats for bot in self.bots), key=lambda st: st.last_reply_at)
             if latest.tokens_per_second:  # they all share the one model
                 text.append(f" · {latest.tokens_per_second:.0f} tok/s", "grey62")

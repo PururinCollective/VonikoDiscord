@@ -67,6 +67,9 @@ RULES = """# Rules (always follow)
 - Stay in character as {name}. Write ONLY {name}'s next chat message: no "{name}:" prefix, never write lines for other people.
 - In the chat log, each line from someone else is written as "DisplayName: message". Some of them may be other AI characters; treat them like any other member.
 - Keep it short like a real chat message: usually 1-3 sentences, one paragraph. Don't repeat phrases or kaomoji you used in your recent messages.
+- Sound like a person typing in a Discord chat, not like an AI assistant or an essay: casual everyday words, contractions, short sentences, in your own voice from the persona. No assistant phrases ("Great question!", "I hope this helps", "Feel free to ask", "Let me know if..."), and no headings or bullet lists in normal chat.
+- If you are an AI or a machine in your own story, the casual wording above doesn't apply to you: talk exactly the way you do in your story. The assistant phrases, headings and lists are still out.
+- Never use the em dash (—). Use a comma, "..." or a new sentence instead, like people do when they type.
 - You can use Discord markdown when it fits, the way people do in chat: **bold** or *italic* to stress a word, ~~strikethrough~~ to take something back, ||spoiler|| to hide a plot twist, `inline code` for a command or file name, and a ```code block``` (with the language after the opening ```) when you share code. Code can be longer than 1-3 sentences. Don't format every message.
 - ACTIONS: when {name} does something people could see (points at something, waves, hides, sighs), write it as a Discord quote on its own first line, then the message on the next line, like this:
 > points at the guitar
@@ -93,6 +96,28 @@ REPLY_TAG_RE = re.compile(r'^\s*\(replying to [^\n"]*?(?:"[^\n]*?")?\)\s*', re.I
 SEXUAL_QUERY_RE = re.compile(
     r"\b(sex\w*|nsfw|porn\w*|hentai|ecchi|nude\w*|naked|lewd|erotic\w*|boobs?|breasts?|nipples?|loli\w*|r-?18)\b"
     r"|エロ|裸|おっぱい|セックス|成人向け", re.IGNORECASE)
+
+DASH_RE = re.compile(r"[ \t]*(?:[—―]+|–)[ \t]*")
+CJK_RE = re.compile(r"[　-鿿＀-￯]")
+
+
+def no_dashes(text: str) -> str:
+    """People hardly ever type an em dash in chat, and it gives a model away. She's told not to use one, but
+    still slips now and then, so each is swapped for what a person would type: "simple—I never" becomes
+    "simple, I never", "but—" at the end becomes "but...", Japanese "そう——でも" becomes "そう…でも"."""
+    def swap(m: re.Match) -> str:
+        before, after = text[m.start() - 1:m.start()], text[m.end():m.end() + 1]
+        if m.group().strip() == "–" and before.isdigit() and after.isdigit():
+            return "-"  # a range: "3–5"
+        if CJK_RE.match(before) or CJK_RE.match(after):
+            return "…"
+        if before in ("", "\n"):
+            return ""
+        if after in ("", "\n", '"', "'", "”", "’", ")"):
+            return "..."  # trailing off
+        return " " if before in ",.!?;:…~" else ", "
+    return DASH_RE.sub(swap, text)
+
 
 def others_section(others: list[dict]) -> str:
     if not others:
@@ -337,7 +362,7 @@ class Character:
         if len(text) >= 2 and text[0] == text[-1] == '"' and text.count('"') == 2:
             text = text[1:-1]
         text = re.sub(r"(?m)^(> .*)\n\s*\n", r"\1\n", text)  # "> action", then the message right under it
-        return text.replace("@everyone", "@​everyone").replace("@here", "@​here")
+        return no_dashes(text).replace("@everyone", "@​everyone").replace("@here", "@​here")
 
     async def maybe_summarize(self, channel_id: int) -> None:
         """After a reply: fold the oldest messages into her memory notes once the chat history gets long, or

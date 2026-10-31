@@ -80,7 +80,7 @@ While the bots run, the window shows a live status screen ([tui.py](tui.py)) ins
  Q  quit   the log is printed again after quitting                                                         up 0:12:04
 ```
 
-- **Characters:** whether she's online, what she's doing (writing, searching the web, compacting her memory), and how big her latest prompt was compared to the model's context. The bar turns yellow as it nears `compact_at` and red when it gets there. Windows at least 116 columns wide also show Memory (stored messages, memory notes, how many times she has compacted), and at least 144 columns wide, Replies (how many, when the last one was, and how many tokens she thought before it). The header shows the thinking level and the model's speed.
+- **Characters:** whether she's online, what she's doing (writing, searching the web, compacting her memory), and how big her latest prompt was compared to the model's context. The bar turns yellow as it nears `compact_at` and red when it gets there. Windows at least 116 columns wide also show Memory (stored messages, memory notes, how many times she has compacted), and at least 144 columns wide, Replies (how many, when the last one was, and how many tokens she thought before it). The header shows the `reasoning_effort` setting (`Effort: low`) and the model's speed.
 - **Turns** (with `--char all`): what the director is doing in each channel: who is answering, who's next, or who is waiting.
 - **Log:** the newest log lines. When you quit, the screen closes and the last 2,000 log lines are printed back into the window.
 
@@ -141,6 +141,8 @@ Call several at once ("Sakurako and Nijika, come here!") and they'll all answer.
 **Replies to other people's messages.** She can be asked about another member's message by replying to it with her name, e.g. "nijika, can you look why it crashes?". She sees the first 300 characters of the replied-to message, plus its images, so a reply to someone's screenshot works.
 
 Each waits `debounce_seconds` for people to finish typing and then answers once. She answers a person with Discord's reply feature, so they're tagged (`always_reply`, with `mention_author` for the ping). In DMs, and when answering another character, she only does that if other messages arrived in the meantime.
+
+**Casual wording.** Characters are told to write like a person typing in chat, in their own voice: everyday words, short sentences, no assistant phrases ("Great question!", "I hope this helps") and no em dashes (—). A character who is an AI in her own story, like GLaDOS, keeps the way she talks there instead of casual chat wording; the rest still applies to her, em dashes included (Portal's subtitles don't use them either). Models still slip an em dash in now and then, so the bot swaps any that's left for what a person would type: a comma, "..." when she trails off, or "…" in Japanese.
 
 **Formatting.** Characters can use Discord markdown when it fits: **bold** and *italic* for stress, ~~strikethrough~~, `||spoilers||`, `inline code` and code blocks with a language (```` ```python ````). They're told not to format every message. Code can run past the usual 1-3 sentences. A reply over Discord's 2000-character limit is sent in parts. A code block cut in two is closed at the end of one part and reopened, with its language, at the start of the next, so both parts still show as code.
 
