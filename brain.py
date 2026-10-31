@@ -82,6 +82,9 @@ SCRUB_SYSTEM = """You edit memory notes about a Discord chat. A person has asked
 Remove every piece of information about them: their name, anything they said, did or shared, and anything others said about them.
 Keep all other notes as they are. Output only the remaining notes. If nothing remains, output only the word NONE."""
 
+# how bot.to_text marks a Discord reply: '(replying to Name: "start of their message") text'
+REPLY_TAG_RE = re.compile(r'^\s*\(replying to [^\n"]*?(?:"[^\n]*?")?\)\s*', re.IGNORECASE)
+
 SEXUAL_QUERY_RE = re.compile(
     r"\b(sex\w*|nsfw|porn\w*|hentai|ecchi|nude\w*|naked|lewd|erotic\w*|boobs?|breasts?|nipples?|loli\w*|r-?18)\b"
     r"|エロ|裸|おっぱい|セックス|成人向け", re.IGNORECASE)
@@ -180,7 +183,8 @@ class Character:
             if not content.strip():
                 continue
             if row["character"] == self.key:
-                role, text = "assistant", content
+                # her sent replies are stored with the reply tag; seeing it in her own turns, she copies it
+                role, text = "assistant", REPLY_TAG_RE.sub("", content)
             else:
                 role, text = "user", f"{row['author_name']}: {content}"
             if chat and chat[-1]["role"] == role:  # many chat templates need strict user/assistant turns
@@ -309,8 +313,8 @@ class Character:
 
     def clean(self, text: str, other_names: set[str]) -> str:
         text = strip_thinking(text)
-        # drop a "Name:" prefix the model may copy from the chat log format
-        text = self.prefix_re.sub("", text).strip()
+        # drop a "Name:" prefix or a "(replying to ...)" tag the model may copy from the chat log format
+        text = REPLY_TAG_RE.sub("", self.prefix_re.sub("", text)).strip()
         # stop if the model starts writing someone else's lines
         others = {n.lower() for n in other_names if n.lower() != self.name.lower()}
         kept = []
