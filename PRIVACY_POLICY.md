@@ -1,6 +1,6 @@
 # Privacy Policy: Pururin Collective character bots
 
-**Effective date:** 31 October 2026
+**Effective date:** 1 November 2026
 
 This policy explains what the AI character bots run for the Pururin Collective Discord server collect, why, and what you can do about it. Currently these are "Oomuro Sakurako", "Shima Rin", "Ijichi Nijika", "Gotoh Hitori", "Hitori Bocchi", "Raymond Reddington", "Naruto Uzumaki" and "GLaDOS" (each a "Bot", together the "Bots"). The Bots are run by the owner of the Pururin Collective Discord server (the "Operator").
 
@@ -51,7 +51,7 @@ It is not used for advertising or profiling, and it is not sold.
 ## 3. Where it goes
 
 - **Discord.** Messages travel through Discord as usual; see [Discord's Privacy Policy](https://discord.com/privacy).
-- **The Operator's computer.** Stored data lives in local SQLite databases, one per Bot, in a `context` folder (for example `context/sakurako.db`, `context/rin.db` and `context/nijika.db`). The databases are not encrypted. They are protected only by the security of the Operator's computer.
+- **The Operator's computer.** Stored data lives in local SQLite databases, one per Bot, in a `context` folder (for example `context/sakurako.db`, `context/rin.db` and `context/nijika.db`). The databases are encrypted with AES-256 (SQLCipher). Each one is locked with its Bot's Discord bot token, which is also kept on the Operator's computer. So the encryption protects copies of the database files, such as backups, but not against someone with full access to that computer.
 - **The AI model.** Message text and images are sent to an AI model (LM Studio) running on a computer on the Operator's private home network. No cloud AI service such as OpenAI, Anthropic or Google receives your messages.
 - **Search providers.** Search queries go to the web search provider described in section 1, under that provider's own privacy policy.
 - **Nobody else.** Data is not shared with other third parties, except where the law requires it.

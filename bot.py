@@ -30,7 +30,7 @@ from PIL import Image
 from brain import Character, forget_user
 from director import Director, answers_person, channel_label
 from llm import LMStudioClient
-from memory import ContextDB, make_snowflake, now_iso
+from memory import ContextDB, WrongKey, connect, is_plain, make_snowflake, now_iso, reencrypt
 
 log = logging.getLogger("bot")
 GET_TOKEN = "Get it from discord.com/developers > the character's app > Bot > Reset Token."
@@ -176,13 +176,26 @@ def move_old_configs(base_dir: Path):
             print(f"Moved {old.name} to {CONFIG_FOLDER}/{new.name}")
 
 
-def open_all_databases(own_path: Path, own_db: ContextDB) -> list[ContextDB]:
-    """This character's database plus every other character's <char>.db in the same folder."""
-    dbs = [own_db]
+def open_all_databases(own_path: Path, own_db: ContextDB) -> tuple[list[ContextDB], list[str]]:
+    """This character's database plus every other character's <char>.db in the same folder, each unlocked
+    with its owner's bot token from config/<owner>.json. Also returns the ones that couldn't be opened."""
+    dbs, unreadable = [own_db], []
     for path in sorted(own_path.parent.glob("*.db")):
-        if path.resolve() != own_path.resolve():  # a context.<char>.db not moved yet still belongs to <char>
-            dbs.append(ContextDB(str(path), owner=path.stem.removeprefix("context.")))
-    return dbs
+        if path.resolve() == own_path.resolve():
+            continue
+        owner = path.stem.removeprefix("context.")  # a context.<char>.db not moved yet still belongs to <char>
+        try:
+            token = load_config(HERE / CONFIG_FOLDER / f"{owner}.json")["discord"]["token"].strip()
+            dbs.append(ContextDB(str(path), owner=owner, key=token))
+        except Exception as e:  # no config any more, its token was reset, the file is in use, ...
+            log.warning("Couldn't open %s for /forgetme or /mydata (%s)", path.name, type(e).__name__)
+            unreadable.append(owner)
+    return dbs, unreadable
+
+
+def unreadable_note(unreadable: list[str]) -> str:
+    return (f"\n(The memory of {', '.join(unreadable)} couldn't be opened, so it wasn't included. Please tell the "
+            "server staff.)" if unreadable else "")
 
 
 def embed_image_url(embed: discord.Embed) -> str | None:
@@ -253,7 +266,7 @@ class ForgetMeView(discord.ui.View):
         await interaction.response.edit_message(content="Deleting your data...", view=None)
         user = self.user
         names = {user.name, user.global_name, user.display_name} - {None}
-        dbs = open_all_databases(self.bot.db_path, self.bot.db)
+        dbs, unreadable = open_all_databases(self.bot.db_path, self.bot.db)
         try:
             deleted, scrubbed = await forget_user(dbs, self.bot.character.llm, user.id, names)
         except Exception:
@@ -268,7 +281,7 @@ class ForgetMeView(discord.ui.View):
                           deleted, scrubbed, user.id)
         await interaction.edit_original_response(
             content=f"Done. Deleted **{deleted}** stored message(s) and removed you from **{scrubbed}** memory "
-                    f"note(s), for every character.")
+                    f"note(s), for every character." + unreadable_note(unreadable))
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -309,13 +322,15 @@ class CharacterBot(discord.Client):
         @self.tree.command(name="forgetme", description="Delete everything the character bots have stored about you")
         @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=False)
         async def forgetme(interaction: discord.Interaction):
-            dbs = open_all_databases(self.db_path, self.db)
+            # unlocking every character's memory takes about a second, and Discord wants an answer within 3
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            dbs, unreadable = open_all_databases(self.db_path, self.db)
             try:
                 count = len(set().union(*(db.user_message_ids(interaction.user.id) for db in dbs)))
             finally:
                 for db in dbs[1:]:
                     db.close()
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"There are **{count}** of your messages stored, plus anything the characters wrote about you "
                 "in their memory notes. This covers every character, not just me.\n"
                 "Deleting removes:\n"
@@ -324,7 +339,7 @@ class CharacterBot(discord.Client):
                 "- the characters' replies that mention your name\n"
                 "- you from every character's memory notes\n"
                 "Messages other people wrote about you are not removed, and anything you send later is "
-                "stored again. This can't be undone.",
+                "stored again. This can't be undone." + unreadable_note(unreadable),
                 view=ForgetMeView(self, interaction.user), ephemeral=True)
 
     async def setup_hook(self):
@@ -730,15 +745,48 @@ def move_old_db(base_dir: Path, db_path: Path, char_id: str):
     print(f"Moved {old.relative_to(base_dir).as_posix()} to {db_path.relative_to(base_dir).as_posix()}")
 
 
+class CantOpenMemory(Exception):
+    """Her memory is encrypted with her bot token, and there's no usable token or it's the wrong one."""
+
+    def __init__(self, name: str, why: str):
+        super().__init__(why)
+        self.name = name
+
+
+def memory_path(cfg: dict) -> Path:
+    return HERE / cfg["memory"].get("db_path", f"{DB_FOLDER}/{cfg['character']['id']}.db")
+
+
+def shown(path: Path) -> str:
+    return path.relative_to(HERE).as_posix() if path.is_relative_to(HERE) else str(path)
+
+
 def load_character(config_path: Path) -> tuple[dict, Character, ContextDB, Path]:
-    """Read a character's config and open her memory. Returns (config, character, database, database path)."""
+    """Read a character's config and open her memory, which is encrypted with her bot token. Returns (config,
+    character, database, database path). Raises CantOpenMemory without a usable token or with a reset one."""
     cfg = load_config(config_path)
     base_dir = HERE
     char_cfg = cfg["character"]
-    db_path = base_dir / cfg["memory"].get("db_path", f"{DB_FOLDER}/{char_cfg['id']}.db")
+    token = cfg["discord"].get("token", "").strip()
+    if problem := token_problem(token):  # even --cli needs it: it's the key to her memory
+        raise CantOpenMemory(char_cfg["name"], f"discord.token in {shown(config_path)} {problem}")
+    db_path = memory_path(cfg)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     move_old_db(base_dir, db_path, char_cfg["id"])
-    db = ContextDB(str(db_path), owner=char_cfg["id"])
+    was_plain = is_plain(str(db_path))
+    try:
+        db = ContextDB(str(db_path), owner=char_cfg["id"], key=token)
+        if was_plain:
+            print(f"Encrypted {shown(db_path)} with {char_cfg['name']}'s bot token")
+    except WrongKey:
+        raise CantOpenMemory(char_cfg["name"], (
+            f"{shown(db_path)} is locked with a different bot token: was {char_cfg['name']}'s token reset? "
+            f"Run  python bot.py --config {shown(config_path)} --rekey  and paste the old token to lock it with "
+            f"the new one. If the old token is gone, her memory can't be read any more: move {shown(db_path)} "
+            "out of the folder and she starts fresh.")) from None
+    except PermissionError:
+        sys.exit(f"{shown(db_path)} is still in use. Stop the copy of {char_cfg['name']} that is still running "
+                 "(close its window or press Q in it), then run this again.")
     others = []  # the other characters (their config files sit next to this one), so she knows who's around
     for name in available_characters(config_path.parent):
         path = config_path.parent / f"{name}.json"
@@ -823,18 +871,43 @@ def run_all(folder: Path, use_tui: bool):
     """Every character in one process, taking turns through the director, with one Q to stop them all."""
     bots, dbs, skipped = [], [], {}
     for name in available_characters(folder):
-        cfg, character, db, db_path = load_character(folder / f"{name}.json")
-        dbs.append(db)
-        token = cfg["discord"].get("token", "").strip()
-        if problem := token_problem(token):
-            skipped[character.name] = f"discord.token in {CONFIG_FOLDER}/{name}.json {problem}"
+        try:
+            cfg, character, db, db_path = load_character(folder / f"{name}.json")
+        except CantOpenMemory as e:
+            skipped[e.name] = str(e)
             continue
-        bots.append((make_bot(cfg, character, db, db_path), token))
+        dbs.append(db)
+        bots.append((make_bot(cfg, character, db, db_path), cfg["discord"]["token"].strip()))
     if not bots:
-        sys.exit("No character has a usable bot token.\n" + "\n".join(skipped.values()))
+        sys.exit("No character could start.\n" + "\n".join(skipped.values()))
     director = Director([bot for bot, _ in bots], debounce=min(bot.debounce for bot, _ in bots),
                         max_bot_chain=min(bot.cfg.get("max_bot_chain", 3) for bot, _ in bots))
     run_bots(bots, dbs, skipped, director, use_tui)
+
+
+def rekey(config_path: Path):
+    """After a bot token reset her memory is still locked with the old token: unlock it with that one (typed in,
+    hidden) and lock it again with the new token from her config."""
+    cfg = load_config(config_path)
+    name, token = cfg["character"]["name"], cfg["discord"].get("token", "").strip()
+    if problem := token_problem(token):
+        sys.exit(f"Put {name}'s new token in {shown(config_path)} first: discord.token {problem}")
+    db_path = memory_path(cfg)
+    if not db_path.exists() or is_plain(str(db_path)):
+        sys.exit(f"{shown(db_path)} isn't locked yet: it's locked with her token the next time she starts.")
+    try:
+        connect(str(db_path), token).close()
+        sys.exit(f"{shown(db_path)} is already locked with the token in {shown(config_path)}. Nothing to do.")
+    except WrongKey:
+        pass
+    old = getpass.getpass(f"{name}'s OLD bot token (what you type stays hidden): ").strip()
+    try:
+        reencrypt(str(db_path), old, token)
+    except WrongKey:
+        sys.exit("That isn't the token her memory is locked with. Nothing was changed.")
+    except PermissionError:
+        sys.exit(f"{shown(db_path)} is in use. Stop {name} first (close her window or press Q in it), then try again.")
+    print(f"Done. {shown(db_path)} is now locked with the new token in {shown(config_path)}.")
 
 
 def main():
@@ -848,6 +921,8 @@ def main():
     parser.add_argument("--user", help="your name in --cli mode")
     parser.add_argument("--say", help="with --cli: send one message, print the reply, and exit")
     parser.add_argument("--no-tui", action="store_true", help="print plain log lines instead of the status screen")
+    parser.add_argument("--rekey", action="store_true", help="after resetting her bot token: unlock her memory with "
+                                                             "the old token and lock it with the new one")
     args = parser.parse_args()
     use_tui = not args.no_tui and sys.stdout.isatty()
 
@@ -856,8 +931,8 @@ def main():
     choices = (", ".join(available_characters(configs))
                or f"none yet (copy {CONFIG_FOLDER}/example.json to {CONFIG_FOLDER}/<char>.json)")
     if args.char and args.char.lower() == "all":
-        if args.cli:
-            sys.exit("--cli talks to one character: pick one with --char")
+        if args.cli or args.rekey:
+            sys.exit(f"--{'cli' if args.cli else 'rekey'} works on one character: pick one with --char")
         run_all(configs, use_tui)
         return
     if args.config:
@@ -868,8 +943,14 @@ def main():
         parser.error(f"choose a character with --char ({choices}, or all) or --config")
     if not config_path.exists():
         sys.exit(f"{config_path} not found. Available characters: {choices}")
+    if args.rekey:
+        rekey(config_path)
+        return
 
-    cfg, character, db, db_path = load_character(config_path)
+    try:
+        cfg, character, db, db_path = load_character(config_path)
+    except CantOpenMemory as e:
+        sys.exit(f"{e}\n{GET_TOKEN}" if str(e).startswith("discord.token") else str(e))
     if args.cli:
         try:
             sys.stdout.reconfigure(encoding="utf-8")
@@ -879,11 +960,7 @@ def main():
         finally:
             db.close()  # flushes SQLite's journal into the database file
         return
-    token = cfg["discord"].get("token", "").strip()
-    if problem := token_problem(token):
-        db.close()
-        sys.exit(f"discord.token in {args.config or f'{CONFIG_FOLDER}/{config_path.name}'} {problem}\n{GET_TOKEN}")
-    run_bots([(make_bot(cfg, character, db, db_path), token)], [db], {}, None, use_tui)
+    run_bots([(make_bot(cfg, character, db, db_path), cfg["discord"]["token"].strip())], [db], {}, None, use_tui)
 
 
 if __name__ == "__main__":

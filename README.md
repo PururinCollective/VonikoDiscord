@@ -46,7 +46,7 @@ Then:
    run.bat --char rin
    ```
 
-The first run creates `.venv`. Every start installs anything missing from `requirements.txt` (`discord.py`, `pillow`, `ddgs`, `rich`).
+The first run creates `.venv`. Every start installs anything missing from `requirements.txt` (`discord.py`, `pillow`, `ddgs`, `rich`, and `sqlcipher3-wheels` for the encrypted memory).
 
 `--char <name>` loads `config/<name>.json` and keeps memory in `context/<name>.db`. You can also give the file directly: `run.bat --config config/rin.json`.
 
@@ -209,6 +209,17 @@ The command is registered every time a bot starts. If a new command doesn't appe
   The notes are written in batches small enough for the model's context too. Compactions show in the log and on the status screen.
 - **Catch-up after a restart.** On startup she fetches up to `catch_up_limit` messages she missed while offline. If the newest one was addressed to her and is less than `catch_up_reply_max_age_minutes` old, she answers it.
 - **Older memory files.** Earlier versions kept memory next to `bot.py` as `context.db` (Sakurako only), then `context.<char>.db`, and later in `context/` as `context.<char>.db`. The next time a character starts, her file is moved to `context/<char>.db` (and upgraded if needed). Stop the running copy of her first.
+- **Encrypted.** Each `context/<char>.db` is encrypted with [SQLCipher](https://www.zetetic.net/sqlcipher/) (AES-256, every page checked with HMAC-SHA512). The key is her bot token from `config/<char>.json`, stretched with PBKDF2. Without the token the file is random bytes, and nothing in it, not even names, can be read. A memory file from before encryption is encrypted in place the next time she starts.
+  - This protects copies of the files: backups, a synced folder, a database sent to someone. It doesn't protect against someone who can read `config/` too, since the token is the key.
+  - DB Browser for SQLite can't open the files any more. Its SQLCipher edition can, with her token as the password.
+  - `/forgetme` and `/mydata` unlock every character's memory with that character's own token. If one can't be opened (her config is gone, or her token changed), the person is told it wasn't included.
+- **Resetting a bot token** (Developer Portal > Bot > Reset Token) changes the key to her memory. Before you paste the new token into her config, keep the old one. After that, run this and paste the old token when asked:
+
+  ```
+  run.bat --char rin --rekey
+  ```
+
+  If she starts with a new token and no rekey, she refuses to start and says so. Her memory isn't touched. If the old token is lost, her memory can't be read again: move `context/<char>.db` out of the folder and she starts with a fresh one.
 - **To wipe a character's memory**, stop her and delete `context/<char>.db`.
 
 ## Talk to them in the terminal
@@ -217,7 +228,7 @@ The command is registered every time a bot starts. If a new command doesn't appe
 run.bat --char rin --cli
 ```
 
-This uses the same brain and memory database, in a private "terminal" channel. Type `/forget` to clear that chat and `/quit` to exit. You can also send a single message with `--say "hi"`.
+This uses the same brain and memory database, in a private "terminal" channel. It needs her bot token in her config too, because that's the key to her memory. Type `/forget` to clear that chat and `/quit` to exit. You can also send a single message with `--say "hi"`.
 
 ## config/&lt;char&gt;.json
 
@@ -229,7 +240,7 @@ Paths in it (`persona_file`, `db_path`) are relative to the project folder. Olde
 | `character.name`, `full_name` | Name used in prompts, and for removing a "Name:" prefix the model sometimes copies into replies |
 | `character.series` | Her series, shown to the other characters so they know who she is |
 | `character.persona_file` | Her character sheet |
-| `discord.token` | Her bot token (keep it secret; `config/*.json` is in `.gitignore`, except `example.json`) |
+| `discord.token` | Her bot token (keep it secret; `config/*.json` is in `.gitignore`, except `example.json`). It's also the key to her encrypted memory: see Memory before resetting it |
 | `discord.name_triggers` | Words that count as calling her |
 | `discord.status_text` | Her Discord status |
 | `discord.guild_ids` | Only work in these server IDs. Empty = any server she's in |
@@ -300,7 +311,7 @@ When you add a character, add the wiki source and copyright line to [persona/LIC
 - `websearch.py`: the web search tool (DuckDuckGo / SearXNG / Brave, plus reading result pages)
 - `director.py`: turn-taking when all characters run together (`--char all`)
 - `tui.py`: the status screen
-- `memory.py`: the `context/<char>.db` memory databases (SQLite)
+- `memory.py`: the `context/<char>.db` memory databases (SQLite, encrypted with SQLCipher)
 - `persona/*.md`: character sheets
 - `persona/example.md`: template for a new character sheet
 - `wiki2md.py`: turns saved wiki pages (`dump/*.html`) into short Markdown (`profile/*.md`)

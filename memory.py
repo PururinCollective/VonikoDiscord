@@ -2,11 +2,21 @@
 
 Each character has her own database: every message she sees, plus a rolling per-channel summary of older
 messages (her "long-term memory"), so the prompt stays small while nothing is forgotten.
+
+The databases are encrypted with SQLCipher (AES-256, every page checked with HMAC-SHA512). The key is her bot
+token, stretched with PBKDF2-HMAC-SHA512, so the file is unreadable without her config.
 """
 import itertools
-import sqlite3
+import logging
+import os
 import time
 from datetime import datetime, timezone
+from pathlib import Path
+
+from sqlcipher3 import dbapi2 as sqlite3  # SQLite with encryption, same API as the standard sqlite3
+
+log = logging.getLogger("memory")
+PLAIN_HEADER = b"SQLite format 3\x00"  # how an unencrypted SQLite file starts; an encrypted one looks random
 
 DISCORD_EPOCH_MS = 1420070400000
 _counter = itertools.count()
@@ -60,11 +70,76 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+class WrongKey(Exception):
+    """The database is encrypted with a different key: her bot token was reset since."""
+
+
+def connect(path: str, key: str) -> sqlite3.Connection:
+    """Open an encrypted database (a new one is created encrypted). Raises WrongKey if the key doesn't fit."""
+    conn = sqlite3.connect(path)
+    conn.execute("PRAGMA cipher_log_level = NONE")  # it would print its own errors over the status screen
+    conn.execute("PRAGMA key = '%s'" % key.replace("'", "''"))  # PRAGMA can't take a bound parameter
+    try:
+        conn.execute("SELECT count(*) FROM sqlite_master").fetchone()
+    except sqlite3.DatabaseError:  # "file is not a database": the key doesn't decrypt it
+        conn.close()
+        raise WrongKey(path) from None
+    return conn
+
+
+def is_plain(path: str) -> bool:
+    """An unencrypted database, from before memory was encrypted."""
+    try:
+        with open(path, "rb") as f:
+            return f.read(len(PLAIN_HEADER)) == PLAIN_HEADER
+    except FileNotFoundError:
+        return False
+
+
+def table_counts(conn: sqlite3.Connection) -> dict[str, int]:
+    tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")]
+    return {t: conn.execute('SELECT count(*) FROM "%s"' % t.replace('"', '""')).fetchone()[0] for t in tables}
+
+
+def reencrypt(path: str, old_key: str | None, new_key: str) -> None:
+    """Write the database again, encrypted with new_key: a plain one (old_key None) or one encrypted with
+    old_key. The copy is checked table by table before it replaces the original. Raises WrongKey if old_key
+    doesn't fit, PermissionError if the database is still open in another program."""
+    tmp = path + ".new"
+    Path(tmp).unlink(missing_ok=True)
+    source = connect(path, old_key) if old_key else sqlite3.connect(path)
+    try:
+        source.execute("PRAGMA wal_checkpoint(TRUNCATE)")  # everything into the main file, nothing left in -wal
+        source.execute("ATTACH DATABASE ? AS target KEY ?", (tmp, new_key))
+        source.execute("SELECT sqlcipher_export('target')")
+        source.execute("DETACH DATABASE target")
+        expected = table_counts(source)
+    finally:
+        source.close()
+    check = connect(tmp, new_key)
+    try:
+        copied = table_counts(check)
+    finally:
+        check.close()
+    try:
+        if copied != expected:
+            raise RuntimeError(f"encrypting {path} lost rows ({expected} became {copied}); it was left as it was")
+        os.replace(tmp, path)
+    finally:
+        Path(tmp).unlink(missing_ok=True)
+    for suffix in ("-wal", "-shm"):  # the old file's (empty) journal files don't belong to the new one
+        Path(path + suffix).unlink(missing_ok=True)
+
+
 class ContextDB:
-    def __init__(self, path: str, owner: str):
-        """`owner` is the id of the character this database belongs to."""
+    def __init__(self, path: str, owner: str, key: str):
+        """`owner` is the id of the character this database belongs to, `key` what it's encrypted with (her
+        bot token). A database from before encryption is encrypted with it right away."""
         self.owner = owner
-        self.conn = sqlite3.connect(path)
+        if is_plain(path):
+            reencrypt(path, None, key)
+            log.info("Encrypted %s with %s's bot token", Path(path).name, owner)
+        self.conn = connect(path, key)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
         columns = {r[1] for r in self.conn.execute("PRAGMA table_info(messages)")}
