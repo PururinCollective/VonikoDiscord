@@ -207,7 +207,7 @@ The command is registered every time a bot starts. If a new command doesn't appe
 ## Memory (`context/<char>.db`)
 
 - **Message log.** Every message in the channels a character watches is saved in her database. Edits update the saved copy, and deleted messages are removed.
-- **Long-term memory.** The last `history_messages` messages per channel go into the prompt word for word. Older ones are folded into a per-channel summary written from her point of view.
+- **Long-term memory.** The last `history_messages` messages per channel go into the prompt word for word. Older ones are folded into a per-channel summary written for her, calling her "you" (notes about her by name made small models talk about themselves in the third person).
 - **Compacting when the context fills up.** LM Studio reports how many tokens the loaded model's context holds (`loaded_context_length`), and every reply reports how big the prompt was. Compaction folds all but the newest `keep_after_compact` messages into her memory notes. It happens in three cases:
   - when a prompt uses `compact_at` of the context (75% by default), right after she replies;
   - before sending, if a prompt would be too big to fit, leaving room for her reply. If it still doesn't fit after compacting, the oldest messages are left out;
