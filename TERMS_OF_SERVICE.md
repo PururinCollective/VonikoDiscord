@@ -1,15 +1,15 @@
 # Terms of Service: Pururin Collective character bots
 
-**Effective date:** 31 October 2026
+**Effective date:** 1 November 2026
 
-These terms cover your use of the AI character bots run for the Pururin Collective Discord server. Currently these are "Oomuro Sakurako", "Shima Rin", "Ijichi Nijika", "Gotoh Hitori", "Hitori Bocchi", "Raymond Reddington", "Naruto Uzumaki" and "GLaDOS" (each a "Bot", together the "Bots"). The Bots are run by the owner of the Pururin Collective Discord server (the "Operator"). If you talk to a Bot, or use a server or DM where one is present, you agree to these terms. If you don't agree, don't interact with the Bots.
+These terms cover your use of the AI character bots run for the Pururin Collective Discord server. Currently these are "Oomuro Sakurako", "Oomuro Nadeshiko", "Oomuro Hanako", "Shima Rin", "Ijichi Nijika", "Gotoh Hitori", "Yamada Ryo", "Kita Ikuyo", "Hitori Bocchi", "Raymond Reddington", "Naruto Uzumaki" and "GLaDOS" (each a "Bot", together the "Bots"). The Bots are run by the owner of the Pururin Collective Discord server (the "Operator"). If you talk to a Bot, or use a server or DM where one is present, you agree to these terms. If you don't agree, don't interact with the Bots.
 
 ## 1. What the Bots are
 
 - The Bots are fan-made AI chat characters:
-  - Oomuro Sakurako from *Yuru Yuri*;
+  - Oomuro Sakurako, Oomuro Nadeshiko and Oomuro Hanako from *Yuru Yuri*;
   - Shima Rin from *Yuru Camp△* (*Laid-Back Camp*);
-  - Ijichi Nijika and Gotoh Hitori from *Bocchi the Rock!*;
+  - Ijichi Nijika, Gotoh Hitori, Yamada Ryo and Kita Ikuyo from *Bocchi the Rock!*;
   - Hitori Bocchi from *Hitoribocchi no ○○ Seikatsu*;
   - Raymond "Red" Reddington from *The Blacklist*;
   - Naruto Uzumaki from *Naruto* and *Boruto: Naruto Next Generations*;

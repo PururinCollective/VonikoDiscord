@@ -307,8 +307,11 @@ class CharacterBot(discord.Client):
         self.channel_ids = set(dcfg.get("channel_ids") or [])
         self.free_talk_ids = set(dcfg.get("free_talk_channel_ids") or [])
         self.triggers = NameTrigger(with_full_name(dcfg.get("name_triggers") or [], character.full_name))
+        # not_me: people who aren't characters here but share her name, e.g. Rin's friend Kagamihara Nadeshiko.
+        # Written in full, their name is read as theirs, like another character's full name.
         self.others_triggers = NameTrigger([t for o in character.others for t in
-                                            with_full_name(o.get("name_triggers") or [], o.get("full_name", ""))])
+                                            with_full_name(o.get("name_triggers") or [], o.get("full_name", ""))]
+                                           + (dcfg.get("not_me") or []))
         self.debounce = dcfg.get("debounce_seconds", 2.5)
         self.pending: dict[int, discord.Message] = {}      # channel id -> newest message to answer
         self.last_trigger: dict[int, float] = {}

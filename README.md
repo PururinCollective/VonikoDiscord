@@ -5,9 +5,13 @@ AI characters from anime and TV that chat in the Pururin Collective Discord serv
 | Character | From | Persona | Config | Memory |
 |---|---|---|---|---|
 | Oomuro Sakurako (大室櫻子) | *Yuru Yuri* | [persona/sakurako.md](persona/sakurako.md) | `config/sakurako.json` | `context/sakurako.db` |
+| Oomuro Nadeshiko (大室撫子) | *Yuru Yuri* | [persona/nadeshiko.md](persona/nadeshiko.md) | `config/nadeshiko.json` | `context/nadeshiko.db` |
+| Oomuro Hanako (大室花子) | *Yuru Yuri* | [persona/hanako.md](persona/hanako.md) | `config/hanako.json` | `context/hanako.db` |
 | Shima Rin (志摩リン) | *Yuru Camp△* | [persona/rin.md](persona/rin.md) | `config/rin.json` | `context/rin.db` |
 | Ijichi Nijika (伊地知虹夏) | *Bocchi the Rock!* | [persona/nijika.md](persona/nijika.md) | `config/nijika.json` | `context/nijika.db` |
 | Gotoh Hitori (後藤ひとり) | *Bocchi the Rock!* | [persona/gotoh.md](persona/gotoh.md) | `config/gotoh.json` | `context/gotoh.db` |
+| Yamada Ryo (山田リョウ) | *Bocchi the Rock!* | [persona/ryo.md](persona/ryo.md) | `config/ryo.json` | `context/ryo.db` |
+| Kita Ikuyo (喜多郁代) | *Bocchi the Rock!* | [persona/kita.md](persona/kita.md) | `config/kita.json` | `context/kita.db` |
 | Hitori Bocchi (一里ぼっち) | *Hitoribocchi no ○○ Seikatsu* | [persona/bocchi.md](persona/bocchi.md) | `config/bocchi.json` | `context/bocchi.db` |
 | Raymond "Red" Reddington | *The Blacklist* | [persona/raymond.md](persona/raymond.md) | `config/raymond.json` | `context/raymond.db` |
 | Naruto Uzumaki (うずまきナルト) | *Naruto* / *Boruto* | [persona/naruto.md](persona/naruto.md) | `config/naruto.json` | `context/naruto.db` |
@@ -126,7 +130,10 @@ So "rin, how's school?" → Rin answers → "oh really? let me check" goes to Ri
 - **Similar words:** "Rin's", "string" or "プリン" never call Rin.
 - **Stutters:** "N-Nijika-chan" and "b-b-bocchi" count.
 - **Full names win:** a name inside another character's full name doesn't call her. "Gotoh Hitori" calls only Gotoh, even though "hitori" is Hitori Bocchi's trigger.
-- **The two Bocchis:** "Bocchi" and "Hitori" (ぼっち, 一里) call Hitori Bocchi. Bocchi the Rock!'s Gotoh Hitori answers to "Gotoh" (後藤, ごとう) or "guitarhero". Nijika knows to call her bandmate "Gotoh-chan" here.
+- **The two Bocchis:** "Bocchi" and "Hitori" (ぼっち, 一里) call Hitori Bocchi. Bocchi the Rock!'s Gotoh Hitori answers to "Gotoh" (後藤, ごとう) or "guitarhero". Nijika knows to call her bandmate "Gotoh-chan" here, Ryo calls her "Gotoh", and Kita calls her "Gotoh-san" instead of "Hitori-chan".
+- **The Oomuro sisters:** "Oomuro" alone calls Sakurako. "Oomuro Nadeshiko" and "Oomuro Hanako" call her sisters.
+- **The two Nadeshikos:** "Nadeshiko" (撫子) calls Oomuro Nadeshiko. Rin calls her Yuru Camp friend "Kagamihara" here, and "Kagamihara Nadeshiko" never calls Oomuro Nadeshiko (that's `not_me` in `config/nadeshiko.json`).
+- **Kita:** "kita" calls Kita Ikuyo, so Malay sentences that start with "kita" ("we") call her too. "Ikuyo" works as well, though she hates her given name.
 
 Call several at once ("Sakurako and Nijika, come here!") and they'll all answer. A list of names counts as a whole when it starts or ends the sentence, if it has an "and" (or "&", "or", "dan") in it: "bocchi, my friends want to meet you: gotoh hitori, ijichi nijika, shima rin and naruto" calls all five. They answer in the order you named them. "hitori, gotoh wants to be friends" has no "and", so it calls only Bocchi.
 
@@ -242,6 +249,7 @@ Paths in it (`persona_file`, `db_path`) are relative to the project folder. Olde
 | `character.persona_file` | Her character sheet |
 | `discord.token` | Her bot token (keep it secret; `config/*.json` is in `.gitignore`, except `example.json`). It's also the key to her encrypted memory: see Memory before resetting it |
 | `discord.name_triggers` | Words that count as calling her |
+| `discord.not_me` | Full names of people who aren't characters here but share her name, e.g. `["kagamihara nadeshiko"]`. Written in full, they don't call her |
 | `discord.status_text` | Her Discord status |
 | `discord.guild_ids` | Only work in these server IDs. Empty = any server she's in |
 | `discord.channel_ids` | Only read/reply in these channels (threads inside them included). Empty = every channel she can see |
@@ -297,7 +305,7 @@ Get channel and server IDs by turning on **Developer Mode** (Discord Settings �
 
 - **Code and everything else** (`*.py`, `run.bat`, `config/example.json`, `persona/example.md`, the docs): [MIT](LICENSE).
 - **Character sheets** (the other `persona/*.md`): [CC BY-SA 4.0](persona/LICENSE.md), because they're based on Fandom wiki articles under CC BY-SA. That file credits the wiki pages.
-- **The characters** (Oomuro Sakurako, Shima Rin, Ijichi Nijika, Gotoh Hitori, Hitori Bocchi, Raymond Reddington, Naruto Uzumaki, GLaDOS), their names and their series belong to their creators and publishers, and neither license covers them. This is an unofficial fan project, not affiliated with or endorsed by them.
+- **The characters** (Oomuro Sakurako, Oomuro Nadeshiko, Oomuro Hanako, Shima Rin, Ijichi Nijika, Gotoh Hitori, Yamada Ryo, Kita Ikuyo, Hitori Bocchi, Raymond Reddington, Naruto Uzumaki, GLaDOS), their names and their series belong to their creators and publishers, and neither license covers them. This is an unofficial fan project, not affiliated with or endorsed by them.
 - **Never publish** `dump/` (saved wiki pages, including Fandom's site code and images), `config/*.json` (bot tokens) or `context/` (members' messages). All three are in `.gitignore`.
 - `profile/` (the wiki text from `wiki2md.py`, copied word for word) is in `.gitignore` too, so it stays out of the MIT-licensed repo.
 
