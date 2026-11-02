@@ -39,7 +39,8 @@
   "llm": {
     "base_url": "http://192.168.88.193:1234",
     "model": "",
-    "temperature": 0.9,
+    "prompt_format": "chat",
+    "temperature": 1,
     "top_p": 0.95,
     "max_tokens": 4096,
     "context_length": 0,

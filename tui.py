@@ -225,6 +225,8 @@ class StatusScreen:
                 limit = llm.configured_context or llm.info.context
                 text.append(f" · {llm.info.id}")
                 text.append(" · vision" if llm.info.vision else " · text only", "grey62")
+                if llm.format:  # text mode: the bot writes the prompt instead of the model's chat template
+                    text.append(f" · {llm.format.name} prompt", "grey62")
                 text.append(f" · context {limit:,}" if limit else " · context size unknown", "grey62")
             # "none" is no thinking at all; unset leaves it to the model
             efforts = dict.fromkeys(c.params.get("reasoning_effort") or "model default" for c in llms)

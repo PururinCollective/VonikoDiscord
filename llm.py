@@ -29,6 +29,46 @@ class ModelInfo:
     id: str
     vision: bool
     context: int | None  # tokens the loaded model takes in (prompt + reply), if LM Studio says
+    arch: str = ""       # e.g. "qwen35", "gemma3", "gpt-oss", if LM Studio says
+
+
+@dataclass(frozen=True)
+class PromptFormat:
+    """How a model family marks chat turns. In text mode the bot writes the whole prompt with these, instead of
+    LM Studio applying the model's own chat template."""
+    name: str
+    starts: dict[str, str]  # role -> what opens a turn
+    end: str                # what closes one
+    stop: tuple[str, ...]   # in case LM Studio hands these back as text instead of stopping on them
+    thinks: bool = False    # the model reasons in <think> ... </think> before it answers
+
+    def render(self, messages: list[dict]) -> str:
+        return "".join(self.starts[m["role"]] + m["content"] + self.end for m in messages)
+
+
+CHATML = {role: f"<|im_start|>{role}\n" for role in ("system", "user", "assistant")}
+FORMATS = {f.name: f for f in (
+    PromptFormat("chatml", CHATML, "<|im_end|>\n", ("<|im_end|>", "<|im_start|>")),
+    PromptFormat("qwen", CHATML, "<|im_end|>\n", ("<|im_end|>", "<|im_start|>"), thinks=True),
+    PromptFormat("llama3", {role: f"<|start_header_id|>{role}<|end_header_id|>\n\n"
+                            for role in ("system", "user", "assistant")},
+                 "<|eot_id|>", ("<|eot_id|>", "<|start_header_id|>")),
+    # Gemma has no system turn: the system prompt goes in a user turn of its own
+    PromptFormat("gemma", {"system": "<start_of_turn>user\n", "user": "<start_of_turn>user\n",
+                           "assistant": "<start_of_turn>model\n"},
+                 "<end_of_turn>\n", ("<end_of_turn>", "<start_of_turn>")),
+)}
+
+
+def format_for(arch: str) -> PromptFormat | None:
+    """The prompt format for a model architecture, for prompt_format "auto". Llama is left out: Mistral models
+    use that architecture too, with a different format."""
+    arch = arch.lower()
+    if arch.startswith("qwen"):
+        return FORMATS["chatml" if arch.startswith("qwen2") else "qwen"]  # Qwen 3 and later think
+    if arch.startswith("gemma"):
+        return FORMATS["gemma"]
+    return None
 
 
 def strip_thinking(text: str) -> str:
@@ -51,6 +91,13 @@ class LMStudioClient:
         self.configured_context = cfg.get("context_length") or 0  # 0: ask LM Studio
         self.params = {k: cfg[k] for k in self.PARAM_KEYS if k in cfg and cfg[k] not in ("", None)}
         self.params.update(cfg.get("extra_params") or {})
+        self.prompt_format = cfg.get("prompt_format") or "chat"
+        if self.prompt_format not in ("chat", "auto", *FORMATS):
+            log.warning("Unknown llm.prompt_format %r (use chat, auto or %s); using chat", self.prompt_format,
+                        ", ".join(FORMATS))
+            self.prompt_format = "chat"
+        self.format = FORMATS.get(self.prompt_format)  # None: chat mode, LM Studio applies the chat template
+        self._format_model = ""                        # the model "auto" last picked a format for
         self.timeout = aiohttp.ClientTimeout(total=cfg.get("timeout_seconds", 300))
         self._session: aiohttp.ClientSession | None = None
         self.info: ModelInfo | None = None  # latest known, for the status screen
@@ -96,10 +143,11 @@ class LMStudioClient:
         if self.configured_model:
             known = next((m for m in models if m["id"] == self.configured_model), None)
             return ModelInfo(self.configured_model, known is None or known.get("type") == "vlm",
-                             known and known.get("loaded_context_length"))
+                             known and known.get("loaded_context_length"), (known or {}).get("arch") or "")
         loaded = [m for m in models if m.get("state") == "loaded"]
         if loaded:
-            return ModelInfo(loaded[0]["id"], loaded[0].get("type") == "vlm", loaded[0].get("loaded_context_length"))
+            return ModelInfo(loaded[0]["id"], loaded[0].get("type") == "vlm", loaded[0].get("loaded_context_length"),
+                             loaded[0].get("arch") or "")
         async with http.get(f"{self.api}/models") as r:  # plain OpenAI API: no load state or vision info
             r.raise_for_status()
             ids = [m["id"] for m in (await r.json())["data"] if "embed" not in m["id"].lower()]
@@ -122,15 +170,24 @@ class LMStudioClient:
         except (aiohttp.ClientError, asyncio.TimeoutError, LLMError):
             return None
 
-    async def chat_message(self, messages: list[dict], **overrides) -> dict:
-        """One completion. Returns {"content": text, "tool_calls": [...], "usage": {...}, "seconds": float};
-        pass tools=[...] to offer tools."""
-        payload = {"model": await self.resolve_model(), "messages": messages, "stream": False,
-                   **self.params, **overrides}
+    async def text_format(self) -> PromptFormat | None:
+        """The format to write prompts in (text mode), or None to send chat messages and let LM Studio apply
+        the model's own chat template (chat mode)."""
+        if self.prompt_format != "auto":
+            return self.format
+        info = await self.model_info()
+        if info.id != self._format_model:
+            self.format, self._format_model = format_for(info.arch), info.id
+            log.info("Prompt format for %s: %s", info.id, self.format.name if self.format else
+                     f"its own chat template (no format here for {info.arch or 'its'} models)")
+        return self.format
+
+    async def _post(self, path: str, payload: dict) -> tuple[dict, float]:
+        """POST to the OpenAI-compatible API. Returns the response and how many seconds it took."""
         http = await self._http()
         started = time.monotonic()
         try:
-            async with http.post(f"{self.api}/chat/completions", json=payload) as r:
+            async with http.post(f"{self.api}/{path}", json=payload) as r:
                 if r.status != 200:
                     text = (await r.text())[:500]
                     error = ContextOverflow if OVERFLOW_RE.search(text) else LLMError
@@ -141,13 +198,34 @@ class LMStudioClient:
             self.problem = f"can't reach LM Studio ({type(e).__name__})"
             raise
         self.problem = ""
+        return data, time.monotonic() - started
+
+    async def chat_message(self, messages: list[dict], **overrides) -> dict:
+        """One completion. Returns {"content": text, "tool_calls": [...], "usage": {...}, "seconds": float};
+        pass tools=[...] to offer tools."""
+        payload = {"model": await self.resolve_model(), "messages": messages, "stream": False,
+                   **self.params, **overrides}
+        data, seconds = await self._post("chat/completions", payload)
         choice = data["choices"][0]
         if choice.get("finish_reason") == "length":
             log.warning("Reply hit max_tokens (%s); consider raising llm.max_tokens",
                         payload.get("max_tokens"))
         message = choice["message"]
         return {"content": strip_thinking(message.get("content") or ""), "tool_calls": message.get("tool_calls") or [],
-                "usage": data.get("usage") or {}, "seconds": time.monotonic() - started}
+                "usage": data.get("usage") or {}, "seconds": seconds}
+
+    async def text_message(self, prompt: str, **overrides) -> dict:
+        """One raw text completion that continues `prompt` (text mode: no chat template, no tools, no images).
+        Returns {"content": text, "usage": {...}, "seconds": float}."""
+        payload = {"model": await self.resolve_model(), "prompt": prompt, "stream": False,
+                   **self.params, **overrides}
+        payload.pop("reasoning_effort", None)  # thinking is written into the prompt instead
+        data, seconds = await self._post("completions", payload)
+        choice = data["choices"][0]
+        if choice.get("finish_reason") == "length" and "max_tokens" not in overrides:
+            log.warning("Reply hit max_tokens (%s); consider raising llm.max_tokens",
+                        payload.get("max_tokens"))
+        return {"content": choice.get("text") or "", "usage": data.get("usage") or {}, "seconds": seconds}
 
     async def chat(self, messages: list[dict], **overrides) -> str:
         return (await self.chat_message(messages, **overrides))["content"]

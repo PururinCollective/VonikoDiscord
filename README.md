@@ -172,6 +172,24 @@ Names in a quote line never call anyone, whether it's a character's action ("> h
 - With a text-only model (e.g. `qwen3.8-27b-defiance-uncensored-mtp`), images are skipped. She only sees the file name.
 - When `llm.model` is empty, the bot checks every 30 seconds which model is loaded, so you can swap models in LM Studio without restarting her.
 
+## Prompt format (text mode)
+
+By default (`llm.prompt_format: "chat"`) the bot sends chat messages and LM Studio turns them into the prompt with the model's own chat template. In **text mode** the bot writes the prompt itself, in the model family's turn format, and LM Studio only continues it (the `/v1/completions` endpoint). That gives the bot more control over a role-play chat:
+
+- **Her turn opens with her name** ("Sakurako:"), and so do her earlier messages, so she answers as herself.
+- **She stops when she starts writing a line for someone else**: at "Kita:", at any other character's name, or at anyone else who talked recently.
+- **Thinking is a step of its own**, cut off after 512 / 1024 / 2048 tokens for `reasoning_effort` low / medium / high (half of `max_tokens` when it's `""`). So thinking never leaves her without room to answer. `"none"` skips it.
+- **No filler turns.** Chat templates need user and assistant turns in strict order, so chat mode adds "(earlier messages omitted)" and "(nobody has said anything new)". Text mode doesn't need them.
+
+Formats: `"auto"` (picked from the model's architecture: `qwen` for Qwen 3 and later, `chatml` for Qwen 2.5, `gemma` for Gemma; any other model stays in chat mode), `"qwen"` (ChatML with `<think>` reasoning), `"chatml"`, `"llama3"` and `"gemma"`. Set one by hand for a fine-tune that uses another family's format; `auto` never picks `llama3`, because Mistral models share Llama's architecture but not its format. Only `qwen` has been tried with a real model so far.
+
+What changes in text mode:
+
+- **Images** need the chat API, so a reply to a message with images is written in chat mode.
+- **Searching** is done by writing `[search: what to look up]` instead of calling the `web_search` tool.
+- **Memory notes** are still written in chat mode.
+- **Picking the wrong format** makes the model ramble or write nonsense. Go back to `"chat"` if she does.
+
 ## Web search
 
 The characters can look things up online: news, release dates, prices, weather, opening hours, and so on. The model decides when a question needs it; small talk is answered straight away.
@@ -267,7 +285,8 @@ Paths in it (`persona_file`, `db_path`) are relative to the project folder. Olde
 | `llm.model` | Model id. Empty = whichever chat model LM Studio has loaded (re-checked every 30 seconds) |
 | `llm.vision` | Show her attached images (only works with a vision model) |
 | `llm.context_length` | Tokens the model's context holds. `0` = ask LM Studio (the context length the model was loaded with). Set it if your LM Studio is too old to report it |
-| `llm.reasoning_effort` | How much the model thinks before replying: `"low"` (default), `"medium"`, `"high"`, `"none"` (off) or `""` (the model decides). With this model, low thinks about 100–350 tokens and makes a reply take 7–15 seconds instead of 3–5, but she answers questions properly instead of brushing them off. Medium thinks about as much as low. Memory notes are always written without thinking, so they don't hold up replies. If thinking ever uses up `max_tokens` before she answers, she tries once more without thinking |
+| `llm.reasoning_effort` | How much the model thinks before replying: `"low"` (default), `"medium"`, `"high"`, `"none"` (off) or `""` (the model decides). With this model, low thinks about 100–350 tokens and makes a reply take 7–15 seconds instead of 3–5, but she answers questions properly instead of brushing them off. Medium thinks about as much as low. Memory notes are always written without thinking, so they don't hold up replies. If thinking ever uses up `max_tokens` before she answers, she tries once more without thinking. In text mode it's a cap on how long she thinks instead (see **Prompt format**) |
+| `llm.prompt_format` | Who writes the prompt: `"chat"` (default, the model's own chat template in LM Studio), or the bot itself in text mode: `"auto"`, `"qwen"`, `"chatml"`, `"llama3"` or `"gemma"`. See **Prompt format (text mode)** |
 | `llm.max_tokens` | Longest reply, thinking included (default `4096`). Leave room for thinking: at `2048` a long think can leave nothing for the answer |
 | `llm.temperature`, `top_p`, `extra_params` | Sampling settings (`extra_params` is merged into the API request as-is) |
 | `web_search.enabled` | Let her search the web |
