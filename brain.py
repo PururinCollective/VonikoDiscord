@@ -359,14 +359,14 @@ class Character:
         rounds = self.max_searches if self.search else 0
         first = thinking = None
         for round_no in range(rounds + 1):
-            prompt = fmt.render(messages) + fmt.starts["assistant"]
+            prompt = fmt.render(messages, think) + fmt.starts["assistant"]
             if think:
-                thinking = await self.llm.text_message(prompt + "<think>\n", stop=["</think>", *fmt.stop],
-                                                       max_tokens=cap)
+                thinking = await self.llm.text_message(prompt + fmt.think_open,
+                                                       stop=[fmt.think_close.strip(), *fmt.stop], max_tokens=cap)
                 first = first or thinking
-                prompt += f"<think>\n{thinking['content'].strip()}\n</think>\n\n"
-            elif fmt.thinks:
-                prompt += "<think>\n\n</think>\n\n"  # how these models are told to answer without thinking
+                prompt += f"{fmt.think_open}{thinking['content'].strip()}{fmt.think_close}"
+            else:
+                prompt += fmt.no_think
             message = await self.llm.text_message(f"{prompt}{self.name}:", stop=stop)
             first = first or message
             text = message["content"]

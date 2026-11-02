@@ -40,34 +40,49 @@ class PromptFormat:
     starts: dict[str, str]  # role -> what opens a turn
     end: str                # what closes one
     stop: tuple[str, ...]   # in case LM Studio hands these back as text instead of stopping on them
-    thinks: bool = False    # the model reasons in <think> ... </think> before it answers
+    # for a model that reasons before it answers:
+    think_open: str = ""    # opens the reasoning...
+    think_close: str = ""   # ...and closes it
+    no_think: str = ""      # an empty reasoning block, which tells it to answer straight away
+    think_on: str = ""      # goes at the top of the system turn to switch reasoning on
 
-    def render(self, messages: list[dict]) -> str:
-        return "".join(self.starts[m["role"]] + m["content"] + self.end for m in messages)
+    @property
+    def thinks(self) -> bool:
+        return bool(self.think_open)
+
+    def render(self, messages: list[dict], think: bool = False) -> str:
+        return "".join(self.starts[m["role"]] + (self.think_on if think and m["role"] == "system" else "")
+                       + m["content"] + self.end for m in messages)
 
 
 CHATML = {role: f"<|im_start|>{role}\n" for role in ("system", "user", "assistant")}
 FORMATS = {f.name: f for f in (
     PromptFormat("chatml", CHATML, "<|im_end|>\n", ("<|im_end|>", "<|im_start|>")),
-    PromptFormat("qwen", CHATML, "<|im_end|>\n", ("<|im_end|>", "<|im_start|>"), thinks=True),
+    PromptFormat("qwen", CHATML, "<|im_end|>\n", ("<|im_end|>", "<|im_start|>"),
+                 "<think>\n", "\n</think>\n\n", "<think>\n\n</think>\n\n"),
     PromptFormat("llama3", {role: f"<|start_header_id|>{role}<|end_header_id|>\n\n"
                             for role in ("system", "user", "assistant")},
                  "<|eot_id|>", ("<|eot_id|>", "<|start_header_id|>")),
-    # Gemma has no system turn: the system prompt goes in a user turn of its own
+    # Gemma 2 and 3 have no system turn: the system prompt goes in a user turn of its own
     PromptFormat("gemma", {"system": "<start_of_turn>user\n", "user": "<start_of_turn>user\n",
                            "assistant": "<start_of_turn>model\n"},
                  "<end_of_turn>\n", ("<end_of_turn>", "<start_of_turn>")),
+    PromptFormat("gemma4", {"system": "<|turn>system\n", "user": "<|turn>user\n", "assistant": "<|turn>model\n"},
+                 "<turn|>\n", ("<turn|>", "<|turn>"),
+                 "<|channel>thought\n", "\n<channel|>", "<|channel>thought\n<channel|>", "<|think|>\n"),
 )}
 
 
 def format_for(arch: str) -> PromptFormat | None:
     """The prompt format for a model architecture, for prompt_format "auto". Llama is left out: Mistral models
-    use that architecture too, with a different format."""
+    use that architecture too, with a different format. Gemma is matched exactly, since Gemma 4 changed it."""
     arch = arch.lower()
     if arch.startswith("qwen"):
         return FORMATS["chatml" if arch.startswith("qwen2") else "qwen"]  # Qwen 3 and later think
-    if arch.startswith("gemma"):
+    if arch in ("gemma", "gemma2", "gemma3", "gemma3n"):
         return FORMATS["gemma"]
+    if arch == "gemma4":
+        return FORMATS["gemma4"]
     return None
 
 

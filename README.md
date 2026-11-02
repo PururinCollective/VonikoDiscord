@@ -181,7 +181,14 @@ By default (`llm.prompt_format: "chat"`) the bot sends chat messages and LM Stud
 - **Thinking is a step of its own**, cut off after 512 / 1024 / 2048 tokens for `reasoning_effort` low / medium / high (half of `max_tokens` when it's `""`). So thinking never leaves her without room to answer. `"none"` skips it.
 - **No filler turns.** Chat templates need user and assistant turns in strict order, so chat mode adds "(earlier messages omitted)" and "(nobody has said anything new)". Text mode doesn't need them.
 
-Formats: `"auto"` (picked from the model's architecture: `qwen` for Qwen 3 and later, `chatml` for Qwen 2.5, `gemma` for Gemma; any other model stays in chat mode), `"qwen"` (ChatML with `<think>` reasoning), `"chatml"`, `"llama3"` and `"gemma"`. Set one by hand for a fine-tune that uses another family's format; `auto` never picks `llama3`, because Mistral models share Llama's architecture but not its format. Only `qwen` has been tried with a real model so far.
+Formats:
+
+- `"auto"` picks one from the model's architecture: `qwen` for Qwen 3 and later, `chatml` for Qwen 2.5, `gemma4` for Gemma 4, and `gemma` for Gemma 2 and 3. Any other model stays in chat mode.
+- `"qwen"`: ChatML with `<think>` reasoning.
+- `"gemma4"`: Gemma 4's `<|turn>` format, with a real system turn and `<|channel>thought` reasoning.
+- `"chatml"`, `"llama3"` and `"gemma"` (Gemma 2 and 3, `<start_of_turn>`).
+
+Set a format by hand for a fine-tune that uses another family's format. `auto` never picks `llama3`, because Mistral models share Llama's architecture but not its format. `qwen` and `gemma4` have been tried with real models; the others haven't yet.
 
 What changes in text mode:
 
@@ -286,7 +293,7 @@ Paths in it (`persona_file`, `db_path`) are relative to the project folder. Olde
 | `llm.vision` | Show her attached images (only works with a vision model) |
 | `llm.context_length` | Tokens the model's context holds. `0` = ask LM Studio (the context length the model was loaded with). Set it if your LM Studio is too old to report it |
 | `llm.reasoning_effort` | How much the model thinks before replying: `"low"` (default), `"medium"`, `"high"`, `"none"` (off) or `""` (the model decides). With this model, low thinks about 100–350 tokens and makes a reply take 7–15 seconds instead of 3–5, but she answers questions properly instead of brushing them off. Medium thinks about as much as low. Memory notes are always written without thinking, so they don't hold up replies. If thinking ever uses up `max_tokens` before she answers, she tries once more without thinking. In text mode it's a cap on how long she thinks instead (see **Prompt format**) |
-| `llm.prompt_format` | Who writes the prompt: `"chat"` (default, the model's own chat template in LM Studio), or the bot itself in text mode: `"auto"`, `"qwen"`, `"chatml"`, `"llama3"` or `"gemma"`. See **Prompt format (text mode)** |
+| `llm.prompt_format` | Who writes the prompt: `"chat"` (default, the model's own chat template in LM Studio), or the bot itself in text mode: `"auto"`, `"qwen"`, `"gemma4"`, `"chatml"`, `"llama3"` or `"gemma"`. See **Prompt format (text mode)** |
 | `llm.max_tokens` | Longest reply, thinking included (default `4096`). Leave room for thinking: at `2048` a long think can leave nothing for the answer |
 | `llm.temperature`, `top_p`, `extra_params` | Sampling settings (`extra_params` is merged into the API request as-is) |
 | `web_search.enabled` | Let her search the web |
