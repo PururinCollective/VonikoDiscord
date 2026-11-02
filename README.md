@@ -142,6 +142,7 @@ Call several at once ("Sakurako and Nijika, come here!") and they'll all answer.
 - **Asking another character:** asked to ask another character something, she calls her by name ("Sakurako, can you tell Anime4000…"), and the other one answers. This is `reply_to_characters`, on by default.
 - **Chain limit:** after `max_bot_chain` (default 3) messages between characters, no character starts another reply until a person speaks, so they can't talk forever. Their answers to a person (the ones quoting your message) don't count, so after five of them greet you, they still have 3 messages to talk among themselves.
 - **`reply_to_bots`:** with this on, she answers any bot that calls her, not only the other characters. The same chain limit applies.
+- **No repeats:** small models sometimes get stuck sending the same line, and two characters doing it keep each other going until the chain limit. If her reply is the same as one of her last 8 messages in the channel, or nearly the same (80% alike, ignoring case and punctuation), she writes it again, told not to repeat herself. If that's a repeat too, she stays quiet. Short replies like "lol" or "Hmph!" may repeat.
 
 **She always knows which message she's answering**, even when several people (or characters) talked in between.
 

@@ -9,6 +9,7 @@ from collections.abc import Awaitable, Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
+from difflib import SequenceMatcher
 from pathlib import Path
 
 import websearch
@@ -33,6 +34,12 @@ THINKING_TOKENS = {"low": 512, "medium": 1024, "high": 2048}
 MAX_STOP_NAMES = 30     # text mode: she stops at the "Name:" of at most this many other people
 # text mode's stand-in for the web_search tool
 SEARCH_RE = re.compile(r"\[search:\s*([^\]\n]*)\]", re.IGNORECASE)
+# A reply this similar (0-1) to one of her last REPEAT_LOOKBACK messages in the channel is a repeat: she tries
+# once more, and if that's a repeat too she stays quiet. Small models get stuck sending the same line, and two
+# characters doing it keep each other going. Replies shorter than REPEAT_MIN_CHARS ("lol", "Hmph!") may repeat.
+REPEAT_SIMILARITY = 0.8
+REPEAT_LOOKBACK = 8
+REPEAT_MIN_CHARS = 20
 
 
 def estimate_tokens(text: str) -> int:
@@ -96,6 +103,10 @@ who people are (names, personalities, facts they shared about themselves, how th
 The notes are for {name} to read, so call {name} "you" ("You promised Haru fried chicken"), and everyone else by name.
 Drop small talk and greetings. Merge with the existing notes instead of repeating them. Output only the notes."""
 
+REPEAT_NOTE = """# Don't repeat yourself
+You already sent this message here: "{said}"
+Don't send it again, not even reworded. Say something new: react to what was just said, or move the conversation on."""
+
 SCRUB_SYSTEM = """You edit memory notes about a Discord chat. A person has asked to be forgotten.
 Remove every piece of information about them: their name, anything they said, did or shared, and anything others said about them.
 Keep all other notes as they are. Output only the remaining notes. If nothing remains, output only the word NONE."""
@@ -127,6 +138,11 @@ def no_dashes(text: str) -> str:
             return "..."  # trailing off
         return " " if before in ",.!?;:…~" else ", "
     return DASH_RE.sub(swap, text)
+
+
+def comparable(text: str) -> str:
+    """`text` without case, punctuation or a reply tag, to tell whether two messages say the same thing."""
+    return re.sub(r"[\W_]+", " ", REPLY_TAG_RE.sub("", text).lower()).strip()
 
 
 def others_section(others: list[dict]) -> str:
@@ -251,7 +267,10 @@ class Character:
 
     async def reply(self, channel_id: int, place: str, target_id: int | None = None,
                     images: list[str] | None = None, on_search: OnSearch | None = None) -> str:
-        names = {m["author_name"] for m in self.db.recent_messages(channel_id, 0, 50)}
+        recent = self.db.recent_messages(channel_id, 0, 50)
+        names = {m["author_name"] for m in recent}
+        sent = [m["content"] for m in recent if m["character"] == self.key][-REPEAT_LOOKBACK:]
+        avoid = ""  # a message of hers she was about to send again, which she's told not to
         if images and not await self.llm.supports_images():
             images = None  # text-only model: she still sees "[attachment: name]" in the message text
         text_format = await self.llm.text_format()
@@ -266,12 +285,14 @@ class Character:
         async def ask(images: list[str] | None, **overrides) -> str:
             fmt = None if images else text_format  # images need the chat API: a text prompt can't hold them
             messages = await self.fitted(channel_id, place, target_id, images, text_mode=fmt is not None)
+            if avoid:
+                messages[0]["content"] += "\n\n" + REPEAT_NOTE.format(said=REPLY_TAG_RE.sub("", avoid)[:300])
             if fmt:
                 return await self.complete_text(channel_id, messages, fmt, announce, names, **overrides)
             return await self.complete(channel_id, messages, announce, **overrides)
 
-        # Local models occasionally end their turn without writing anything, or think until max_tokens runs
-        # out: the second attempt goes without thinking, so she still answers.
+        # Local models occasionally end their turn without writing anything, think until max_tokens runs out,
+        # or send a line they already sent: the second attempt goes without thinking, so she still answers.
         for attempt, overrides in enumerate(({}, NO_THINKING)):
             try:
                 text = await ask(images, **overrides)
@@ -286,13 +307,29 @@ class Character:
                 log.warning("Model rejected the image(s); retrying text-only", exc_info=True)
                 images = None
                 text = await ask(None, **overrides)
-            if text := self.clean(text, names):
+            if not (text := self.clean(text, names)):
+                log.warning("Empty reply from the model for %s (attempt %d)%s", self.name, attempt + 1,
+                            "; trying again without thinking" if attempt == 0 else "")
+                continue
+            if not (old := self.repeat_of(text, sent)):
                 self.stats.replies += 1
                 self.stats.last_reply_at = time.time()
                 return text
-            log.warning("Empty reply from the model for %s (attempt %d)%s", self.name, attempt + 1,
-                        "; trying again without thinking" if attempt == 0 else "")
+            if avoid or attempt:
+                log.info("%s repeated herself in %s again; staying quiet", self.name, self.label(channel_id))
+                return ""
+            log.info("%s was about to repeat herself in %s; trying again", self.name, self.label(channel_id))
+            avoid = old
         return ""
+
+    @staticmethod
+    def repeat_of(text: str, sent: list[str]) -> str:
+        """The message in `sent` that `text` (nearly) repeats, or ""."""
+        new = comparable(text)
+        if len(new) < REPEAT_MIN_CHARS:
+            return ""
+        return next((old for old in reversed(sent)
+                     if SequenceMatcher(None, new, comparable(old)).ratio() >= REPEAT_SIMILARITY), "")
 
     async def fitted(self, channel_id: int, place: str, target_id: int | None = None,
                      images: list[str] | None = None, text_mode: bool = False) -> list[dict]:
