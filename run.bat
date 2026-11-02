@@ -7,5 +7,7 @@ if not exist .venv\Scripts\python.exe (
 )
 rem quick when everything is already installed; picks up packages added to requirements.txt
 .venv\Scripts\python -m pip install -q --disable-pip-version-check -r requirements.txt
-if /i "%~1"=="--char" title %~2
+if /i "%~1"=="--char" (
+    if /i "%~2"=="all" (title VonikoDiscord - all characters) else (title %~2)
+)
 .venv\Scripts\python bot.py %*
